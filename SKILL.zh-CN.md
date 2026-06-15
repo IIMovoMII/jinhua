@@ -1,65 +1,75 @@
 # jinhua 中文说明
 
-> 英文 [SKILL.md](SKILL.md) 是实际 Skill 控制面；本文件是面向中文用户的翻译说明，不作为 Codex/Claude 的主控文件。
+> [SKILL.md](SKILL.md) 是真正被智能体（Agent）读取的英文控制文件；本文件面向中文用户，解释 jinhua 的运行逻辑和使用边界。
 
 ## 使命
 
-把真实任务中反复出现的经验，转化成小而明确、经过用户确认的 Skill 改进。
+`jinhua` 把真实项目里反复出现的工作经验，整理成小而明确、经过用户确认的 Skill 改进。
 
-模型负责发现信号、聚类、抽象、起草提案和调用 CLI。用户只负责风险确认：
+模型负责：
 
-- `Yes`：应用或记录这个提案。
+- 发现可复用的方法论信号。
+- 把同类信号归到一起。
+- 抽象成更通用的方法。
+- 起草 Skill 修改提案。
+- 调用 CLI 记录和验证数据。
+
+用户只负责最后一道风险确认：
+
+- `Yes`：采纳或记录提案。
 - `No`：拒绝提案，并让对应聚类进入冷却。
-- `Revision`：记录修改意见，重写提案，再问同一个确认问题。
+- `Revision`：记录修改意见，重写后再确认。
 
-## 什么时候使用
+## 什么时候该触发
 
-当前任务出现可复用的方法论信号时使用本 Skill：
+只有当前任务出现“以后还可能用到的方法”时，才应该用 jinhua。典型场景包括：
 
 - 用户纠正了模型的推理方向、验证标准或工作流程。
-- 某个任务成功，是因为一个可迁移的方法起作用。
-- 某个任务失败或返工，是因为出现了重复的推理错误。
-- 多个低层提示表达了同一个高层方法。
+- 一个任务成功，是因为某个可迁移的方法起了作用。
+- 一个任务失败或返工，是因为出现了重复的推理错误。
+- 几条看似零散的提示，其实表达的是同一个高层方法。
 - 某个 Skill 规则缺失、重复、过宽、过窄或成本太高。
-- 用户要求让 Skill 进化更自动、闭环或更聪明。
+- 用户要求让 Skill 进化更自动、更闭环、更聪明。
 
-不要把它用于一次性事实、风格偏好、私人记忆、普通 bug 修复或通用 prompt 模板。
+不要用它记录一次性事实、个人偏好、私人记忆、普通 bug 修复，或泛泛的 prompt 模板。
 
 ## 交互语言
 
-本 Skill 面向用户输出的对话，应跟随用户当前使用的语言。
+面向用户的解释要跟随用户当前语言。
 
-例子：
+- 用户用中文交流，就用中文解释提案、风险和确认问题。
+- 用户用阿拉伯语交流，就用阿拉伯语解释提案、风险和确认问题。
+- 用户切换语言后，跟随最近一次明确使用的语言。
 
-- 用户用阿拉伯语交流，就用阿拉伯语解释 proposal、risk 和用户确认。
-- 用户用中文交流，就用中文解释 proposal、risk，以及生成 Skill 时给用户看的提示。
-- 如果用户切换语言，跟随最近一次明确的用户语言。
+可执行标识保持英文，避免命令和数据不兼容：
 
-持久化数据和可执行标识保持稳定：
-
-- CLI 命令、参数名、JSON 字段、id、文件路径和 operator id 保持英文。
-- 项目经验记录、signal summary 和生成出来的 Skill 文件可以保持英文，除非用户另有要求。
-- 用户确认门可以本地化展示，但要同时包含规范 token：`Yes`、`No`、`Revision`，避免决策歧义。
+- CLI 命令、参数名、JSON 字段、id、文件路径和 operator id 不翻译。
+- 项目经验记录、信号摘要（signal summary）和生成出来的 Skill 文件可以保持英文，除非用户要求中文。
+- 用户确认可以本地化展示，但必须同时保留 `Yes`、`No`、`Revision`，避免误判。
 
 ## 自动检查点
 
-Skill 本身不能作为真正的后台进程运行。这里的“自动”是指：只要触发本 Skill，就运行 `cycle`。
+Skill 不能像后台服务一样自己常驻运行。jinhua 所说的“自动”，指的是：只要这个 Skill 被触发，就先跑一次 `cycle`。
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> cycle
 ```
 
-`cycle` 是确定性的检查点：
+`cycle` 是确定性检查点，会做五件事：
 
-1. 如果缺少 `.jinhua/data/`，就初始化。
-2. 汇总本地 signals、clusters 和 pending gates。
-3. 把 active 本地信号导入已安装 Skill 的 `global-data/`。
-4. 汇总跨项目 method clusters 和 pending global gates。
-5. 为 ready clusters 打印 proposal skeleton 提示。
+1. 缺少 `.jinhua/data/` 时自动初始化。
+2. 汇总当前项目里的信号、聚类和待确认提案。
+3. 把活跃的本地信号导入已安装 Skill 的 `global-data/`。
+4. 汇总跨项目方法聚类和全局待确认提案。
+5. 为已经成熟的聚类打印提案骨架。
 
-在触发 Skill 的开头、任何改变账本的命令之后，以及包含明确方法论信号的大任务结束前，都运行 `cycle`。
+在这些时机运行 `cycle`：
 
-如果 `cycle` 报告有 pending 本地或全局 proposal，先处理用户确认，再创建新的 proposal。
+- Skill 刚被触发时。
+- `log-signal`、`apply-proposal`、`reject-proposal` 等改变账本的命令之后。
+- 一个包含明显方法论经验的大任务结束前。
+
+如果 `cycle` 报告已有待确认的本地或全局提案，先处理用户确认，再创建新提案。
 
 ## 运行态数据
 
@@ -81,13 +91,13 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> cycl
 - `<jinhua-dir>/global-data/rejected-global-proposals.jsonl`
 - `<jinhua-dir>/global-data/project-index.json`
 
-原始证据留在项目本地。跨项目只晋升压缩过的方法论证据和哈希后的项目身份。
+原始证据留在项目本地。跨项目层只保存压缩过的方法论证据和哈希后的项目身份。
 
-如果一个工作区里混有多个不相关项目或对话，使用 `--project-id <stable-key>` 或 `JINHUA_PROJECT_ID` 区分它们；全局层只保存哈希，不保存明文 key。
+如果一个工作区里混有多个不相关项目或多段对话，用 `--project-id <stable-key>` 或 `JINHUA_PROJECT_ID` 手动区分；全局层只保存哈希，不保存明文 key。
 
 ## 记录信号
 
-只记录清晰、可复用的方法论信号。弱信号通常应该忽略。
+只记录清晰、可复用的方法论信号。弱信号通常直接忽略。
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> log-signal \
@@ -106,39 +116,29 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> log-
   --auto-init
 ```
 
-`cluster_key` 的格式必须是：
+关键参数：
 
-```text
-operator:short_method_slug
-```
-
-`strength` 含义：
-
-- `1`：普通自我观察。
-- `2`：明确用户纠正或重复模式。
-- `3`：高成本失败、重复返工，或用户明确要求沉淀。
-
-可选 signal card 字段能让跨项目合并更准确：
-
-- `trigger`：这个方法什么时候适用。
-- `action`：可复用的方法动作。
-- `transfer_conditions`：它可以迁移到哪些场景。
+- `cluster_key`：本地聚类键，格式必须是 `operator:short_method_slug`。
+- `strength`：信号强度；`1` 普通观察，`2` 明确纠正或重复模式，`3` 高成本失败、反复返工或用户明确要求沉淀。
+- `trigger`：什么时候使用这个方法。
+- `action`：可迁移的核心动作，也是全局合并最重要的线索。
+- `transfer_conditions`：适合迁移到哪些场景。
 - `negative_cases`：什么时候不要用。
-- `verification_path`：如何检查这个方法是否被正确执行。
-- `confidence`：0 到 1 的排序信号，不是最终裁判。
+- `verification_path`：如何检查这个方法是否真的执行到位。
+- `confidence`：0 到 1 的辅助排序分，不是最终判断。
 
-记录后运行 `cycle`。
+记录后再运行 `cycle`。
 
 ## 本地提案确认
 
-本地 cluster 满足任一条件时生成 proposal：
+本地聚类满足任一条件时，可以创建提案：
 
-- 至少 3 条 active signals。
-- 总 strength 至少 5。
-- 用户明确要求 remember、crystallize、写入 Skill 或现在就 evolve。
-- 高成本失败被判断为可复用且紧急。
+- 至少 3 条活跃信号。
+- 总强度至少 5。
+- 用户明确要求“记住、沉淀、写进 Skill、现在就进化”。
+- 出现可复用且紧急的高成本失败。
 
-以 `cycle` 输出的 skeleton 为起点，细化 target、patch 和 risk，然后运行：
+以 `cycle` 打印的骨架为起点，补齐目标、改动和风险：
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> propose \
@@ -149,86 +149,86 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> prop
   --risk "<main side effect>"
 ```
 
-给用户展示下面这个结构，但外层说明要使用用户当前对话语言：
+给用户展示时，用用户当前语言说明，但保留规范字段：
 
 ```markdown
 ## Skill Evolution Proposal
 
 Trigger:
-[why the threshold was reached]
+[为什么达到阈值]
 
 Decision:
 proposed_edit / crystallize_experience / merge_rule / experimental_operator / core_operator_promotion / reject
 
 Evidence:
-[up to 3 representative signal summaries]
+[最多 3 条代表性信号摘要]
 
 Target:
-[target Skill / file / insertion location]
+[目标 Skill / 文件 / 插入位置]
 
 Patch:
-[1-3 sentence patch]
+[1 到 3 句话说明要怎么改]
 
 Risk:
-[main side effect]
+[主要副作用]
 
 User gate:
 Choose: Yes / No / Revision
 ```
 
-即使外层说明本地化，`decision` 值、proposal id、命令名、参数名、文件路径和代码片段仍保持英文。
+`decision` 值、proposal id、命令名、参数名、文件路径和代码片段保持英文。
 
 ## 全局晋升
 
-只有同时满足这些条件，才算真正跨项目重复：
+“跨项目重复”不是简单看次数。只有同时满足这些条件，才算真正值得全局晋升：
 
-- 规范化后的 method fingerprint 匹配，优先来自 `operator + action`。
-- `trigger` 和 `transfer_conditions` 是迁移判断证据，不是硬拆分键。
-- 证据来自多个不同项目哈希，而不是同一项目重复刷次数。
-- 模型判断这个方法通过抽象性、可迁移性、风险和重复性检查。
-- 任何全局 Skill 修改前都必须给用户看 global proposal。
+- 规范化后的方法指纹（method fingerprint）匹配，优先来自 `operator + action`。
+- `trigger` 和 `transfer_conditions` 能证明这个方法确实能迁移。
+- 证据来自多个不同项目哈希，不是同一项目反复刷次数。
+- 模型判断它通过抽象性、可迁移性、风险和重复性检查。
+- 任何全局 Skill 修改前，都必须先给用户看全局提案。
 
-默认全局 ready 条件：
+默认全局成熟条件：
 
-- 3 个不同项目、5 条证据、strength 7。
-- 或快速路径：2 个不同项目、strength 6，并且有重复高强度或用户纠正证据。
+- 3 个不同项目、5 条证据、总强度 7。
+- 或快速路径：2 个不同项目、总强度 6，并且有重复高强度证据或用户纠正证据。
 
-`global-merge-suggestions` 可以查看相似全局 clusters。它只给建议，不修改数据。
+`global-merge-suggestions` 只读查看相似全局聚类，不修改数据。
 
 ## 应用决策
 
-本地 proposal：
+本地提案：
 
 - `Yes`：运行 `apply-proposal`，然后 `cycle`。
 - `No`：运行 `reject-proposal`，然后 `cycle`。
-- `Revision`：运行 `reject-proposal --revision`，重写后再问。
+- `Revision`：运行 `reject-proposal --revision`，按反馈重写后再问。
 
-全局 proposal：
+全局提案：
 
 - `Yes`：运行 `global-apply`，然后 `cycle`。
 - `No`：运行 `global-reject`，然后 `cycle`。
-- `Revision`：运行 `global-reject --revision`，重写后再问。
+- `Revision`：运行 `global-reject --revision`，按反馈重写后再问。
 
-被拒绝的 clusters 会进入冷却。除非出现更强证据，不要再次打扰用户。
+被拒绝的聚类会进入冷却。除非出现更强证据，不要反复打扰用户。
 
 ## 边界
 
-CLI 做确定性的账本工作：初始化、追加信号、聚类、全局导入、proposal 记录、用户确认结果、merge suggestion、压缩和验证。
+CLI 只做确定性账本工作：初始化、追加信号、聚类、全局导入、记录提案、记录用户确认、合并建议、压缩和验证。
 
-CLI 不判断某个方法是否智能、可迁移或值得写入 Skill。这些判断由模型完成，风险由用户确认。
+CLI 不判断某个方法是否智能、是否可迁移、是否值得写入 Skill。这些判断由模型完成，风险由用户确认。
 
-机器学习不是核心闭环的一部分。未来即使加入，也只能辅助排序或候选检索，不能绕过确定性规则、proposal review、validate 或用户确认。
+机器学习不是核心闭环。未来即使加入，也只能辅助排序或候选检索，不能绕过确定性规则、提案审查、数据验证和用户确认。
 
 ## 成功标准
 
-完整闭环成功时应满足：
+完整闭环应当满足：
 
 1. 发现一条可复用的方法论信号。
-2. `cycle` 确认状态和 pending gates。
-3. 信号被静默记录并聚类。
-4. ready clusters 产生 proposal skeleton。
-5. 模型创建紧凑的 Skill Evolution Proposal。
-6. 用户选择 Yes / No / Revision。
+2. `cycle` 确认状态和待确认事项。
+3. 信号被静默记录并进入聚类。
+4. 成熟聚类产生提案骨架。
+5. 模型创建紧凑的 Skill 进化提案。
+6. 用户选择 `Yes`、`No` 或 `Revision`。
 7. 采纳或拒绝结果被记录。
-8. 采纳的变化以最小有用 patch 应用或记录。
+8. 采纳的变化以最小有用改动应用或记录。
 9. 跨项目晋升使用不同项目证据，并走同一个用户确认门。

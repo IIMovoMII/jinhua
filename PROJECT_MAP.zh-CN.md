@@ -1,16 +1,16 @@
-# PROJECT_MAP 中文说明
+# 项目地图
 
-> 英文 [PROJECT_MAP.md](PROJECT_MAP.md) 是主版本；本文件是中文镜像。
+> [PROJECT_MAP.md](PROJECT_MAP.md) 是英文主版本；本文件是中文说明，帮助中文用户快速看懂项目结构。
 
 ## 产品形态
 
-`jinhua` 是一个紧凑的 Skill + CLI，用来把重复出现的方法论信号转成经过用户确认的 Skill 改进。
+`jinhua` 是一个小型 Skill + 单文件 CLI。它负责把反复出现的方法论信号，转成经过用户确认的 Skill 改进。
 
 职责分工：
 
-- **Skill**：判断一个信号是否可复用、可迁移、有风险、重复或值得提案。
-- **CLI**：记录 signals、更新 clusters、导入全局晋升证据、输出 skeleton、记录用户确认结果、建议 merge candidates、压缩和验证数据。
-- **用户**：只做 Yes / No / Revision 风险确认。
+- **Skill**：判断信号是否可复用、可迁移、有风险、重复，是否值得形成提案。
+- **CLI**：记录信号、更新聚类、导入全局晋升证据、输出提案骨架、记录用户确认、给出合并建议、压缩并验证数据。
+- **用户**：只做最后的风险确认，也就是 `Yes`、`No`、`Revision`。
 
 ## 主要文件
 
@@ -63,7 +63,7 @@ jinhua/
     └── evolution-state.json
 ```
 
-运行态全局晋升目录：
+全局晋升运行态目录：
 
 ```text
 jinhua/global-data/
@@ -76,26 +76,28 @@ jinhua/global-data/
 └── global-state.json
 ```
 
-## 当前 CLI 入口
+`global-data/` 是运行态，不随开源包提交。
 
-- `init`
-- `cycle`
-- `log-signal`
-- `list-clusters`
-- `propose`
-- `apply-proposal`
-- `reject-proposal`
-- `global-cycle`
-- `global-status`
-- `global-propose`
-- `global-merge-suggestions`
-- `global-apply`
-- `global-reject`
-- `compact`
-- `status`
-- `validate`
+## CLI 入口
 
-公开 CLI 入口只围绕上面的闭环展开。
+- `init`：初始化运行态。
+- `cycle`：自动检查点。
+- `log-signal`：记录方法论信号。
+- `list-clusters`：查看本地聚类。
+- `propose`：创建本地提案。
+- `apply-proposal`：记录本地采纳。
+- `reject-proposal`：记录本地拒绝或修订。
+- `global-cycle`：查看并导入全局晋升状态。
+- `global-status`：查看全局统计。
+- `global-propose`：创建全局提案。
+- `global-merge-suggestions`：只读查看相似全局方法。
+- `global-apply`：记录全局采纳。
+- `global-reject`：记录全局拒绝或修订。
+- `compact`：压缩低价值信号。
+- `status`：查看本地状态。
+- `validate`：验证数据结构。
+
+公开 CLI 入口只围绕这条闭环展开，不额外扩张。
 
 ## 数据规则
 
@@ -103,13 +105,13 @@ jinhua/global-data/
 - 全局晋升层只保存压缩过的方法论证据。
 - `project-index.json` 保存项目身份哈希，不保存原始路径。
 - `global-data/` 和 `.jinhua/` 是运行态，不打包、不提交。
-- 一个工作区混有多个不相关项目或对话时，使用 `--project-id` 或 `JINHUA_PROJECT_ID` 区分。
+- 一个工作区混有多个不相关项目或对话时，用 `--project-id` 或 `JINHUA_PROJECT_ID` 区分。
 
 ## 不要回退
 
-- 不要要求用户管理日常信号账本。
+- 不要要求用户手动管理日常信号账本。
 - 不要因为单条弱信号打扰用户。
 - 不要绕过用户确认自动应用 Skill 修改。
 - 不要把同一项目的重复信号算成跨项目重复。
-- 不要添加 daemon、数据库、向量库、dashboard 或机器学习核心闭环。
-- 不要把宽泛 observation 命令加入主流程。
+- 不要添加后台进程、外部数据库、向量库、仪表盘或机器学习核心闭环。
+- 不要把宽泛的观察命令加入主流程。
