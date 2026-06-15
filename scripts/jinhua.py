@@ -91,6 +91,14 @@ PROPOSAL_DECISIONS = {
     "core_operator_promotion",
     "reject",
 }
+PROPOSAL_PLACEMENTS = {
+    "project_rule",
+    "skill_patch",
+    "personal_global_skill",
+}
+PLACEMENT_USER_GATE = (
+    "project_rule(Yes) / skill_patch(Yes) / personal_global_skill(Yes) / No / Revision"
+)
 OPERATOR_TIERS = {"core", "experimental", "deprecated", "none"}
 SCORE_KEYS = [
     "problem_representation",
@@ -150,6 +158,13 @@ def make_id(prefix: str) -> str:
 
 def skill_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def codex_home() -> Path:
+    explicit = os.environ.get("CODEX_HOME", "").strip()
+    if explicit:
+        return Path(explicit).expanduser().resolve()
+    return Path.home() / ".codex"
 
 
 def project_root(args: argparse.Namespace) -> Path:
@@ -521,6 +536,303 @@ def method_signature(signal: dict) -> str:
     return " | ".join(parts)
 
 
+def proposal_query_parts(cluster: dict, records: list[dict]) -> list[str]:
+    parts = [
+        str(cluster.get("cluster_key") or ""),
+        str(cluster.get("method_key") or ""),
+        str(cluster.get("operator") or ""),
+        str(cluster.get("ready_reason") or ""),
+    ]
+    parts.extend(str(item) for item in cluster.get("summary_samples", []))
+    parts.extend(str(item) for item in cluster.get("method_signature_samples", []))
+    for record in records:
+        for field in [
+            "summary",
+            "context",
+            "trigger",
+            "action",
+            "transfer_conditions",
+            "negative_cases",
+            "verification_path",
+            "risk",
+        ]:
+            parts.append(str(record.get(field) or ""))
+    return parts
+
+
+def proposal_positive_parts(cluster: dict, records: list[dict]) -> list[str]:
+    parts = [
+        str(cluster.get("cluster_key") or ""),
+        str(cluster.get("method_key") or ""),
+        str(cluster.get("operator") or ""),
+        str(cluster.get("ready_reason") or ""),
+    ]
+    parts.extend(str(item) for item in cluster.get("summary_samples", []))
+    parts.extend(str(item) for item in cluster.get("method_signature_samples", []))
+    for record in records:
+        for field in [
+            "summary",
+            "context",
+            "trigger",
+            "action",
+            "transfer_conditions",
+            "verification_path",
+        ]:
+            parts.append(str(record.get(field) or ""))
+    return parts
+
+
+def parse_skill_frontmatter(text: str, fallback_name: str) -> tuple[str, str]:
+    name = fallback_name
+    description = ""
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            for raw_line in text[3:end].splitlines():
+                line = raw_line.strip()
+                if ":" not in line:
+                    continue
+                key, value = line.split(":", 1)
+                value = value.strip().strip("\"'")
+                if key.strip() == "name" and value:
+                    name = value
+                elif key.strip() == "description" and value:
+                    description = value
+    return name, description
+
+
+def read_skill_candidate(skill_md: Path, source: str) -> dict | None:
+    try:
+        text = skill_md.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    name, description = parse_skill_frontmatter(text[:8000], skill_md.parent.name)
+    body_head = re.sub(r"---.*?---", " ", text[:6000], count=1, flags=re.S)
+    search_text = " ".join([name, skill_md.parent.name, description, body_head])
+    return {
+        "name": name,
+        "path": str(skill_md.resolve()),
+        "source": source,
+        "description": compact_text(description, limit=240),
+        "search_text": search_text,
+    }
+
+
+def discover_local_skills(args: argparse.Namespace | None = None) -> list[dict]:
+    candidates: list[dict] = []
+    seen: set[str] = set()
+
+    paths: list[tuple[Path, str]] = []
+    if args is not None:
+        project_skill = project_root(args) / "SKILL.md"
+        if project_skill.exists():
+            paths.append((project_skill, "current_project"))
+
+    installed_dir = codex_home() / "skills"
+    if installed_dir.exists():
+        try:
+            for child in sorted(installed_dir.iterdir(), key=lambda p: p.name.lower()):
+                if not child.is_dir() or child.name.startswith("."):
+                    continue
+                skill_md = child / "SKILL.md"
+                if skill_md.exists():
+                    paths.append((skill_md, "codex_home"))
+        except OSError:
+            pass
+
+    current_skill = skill_root() / "SKILL.md"
+    if current_skill.exists():
+        paths.append((current_skill, "jinhua_runtime"))
+
+    for skill_md, source in paths:
+        resolved = str(skill_md.resolve()).lower()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        candidate = read_skill_candidate(skill_md, source)
+        if candidate:
+            candidates.append(candidate)
+    return candidates
+
+
+def score_skill_candidate(candidate: dict, query_text: str, query_words: set[str]) -> tuple[int, list[str]]:
+    candidate_text = str(candidate.get("search_text") or "").lower()
+    candidate_words = set(method_words(candidate_text))
+    matches = sorted(query_words & candidate_words)
+    score = len(matches)
+    name = str(candidate.get("name") or "").lower()
+    folder = Path(str(candidate.get("path") or "")).parent.name.lower()
+    for token in [name, folder, name.replace("-", " "), folder.replace("-", " ")]:
+        if token and token in query_text:
+            score += 8
+    for word in matches:
+        if word in name or word in folder:
+            score += 2
+    description = str(candidate.get("description") or "").lower()
+    for word in matches:
+        if word in description:
+            score += 1
+    if candidate.get("source") == "current_project":
+        for phrase in ["this skill", "current skill", "self improvement", "skill evolution", "jinhua"]:
+            if phrase in query_text:
+                score += 3
+                break
+    return score, matches[:8]
+
+
+def recommend_local_skill(args: argparse.Namespace | None, cluster: dict, records: list[dict]) -> dict:
+    if args is None:
+        return {}
+    query_text = " ".join(proposal_query_parts(cluster, records)).lower()
+    query_words = set(method_words(query_text))
+    if not query_words:
+        return {}
+    scored = []
+    for candidate in discover_local_skills(args):
+        score, matches = score_skill_candidate(candidate, query_text, query_words)
+        if score <= 0:
+            continue
+        scored.append({
+            "name": candidate["name"],
+            "path": candidate["path"],
+            "source": candidate["source"],
+            "score": score,
+            "matched_terms": matches,
+        })
+    scored.sort(key=lambda item: (item["score"], item["source"] == "current_project"), reverse=True)
+    best = scored[0] if scored else {}
+    if not best or int(best.get("score", 0)) < 3:
+        return {}
+    best["alternatives"] = scored[1:4]
+    terms = ", ".join(best.get("matched_terms", [])[:5]) or "metadata overlap"
+    best["reason"] = f"best local Skill match by name/description/rule overlap: {terms}"
+    return best
+
+
+def placement_text(cluster: dict, records: list[dict]) -> str:
+    return " ".join(proposal_positive_parts(cluster, records)).lower()
+
+
+def looks_like_skill_patch(text: str, recommendation: dict) -> bool:
+    phrases = [
+        "existing skill",
+        "local skill",
+        "target skill",
+        "skill rule",
+        "skill.md",
+        "references/",
+        "write into a skill",
+        "enhance skill",
+        "update skill",
+        "patch skill",
+        "skill update",
+        "skill evolution",
+    ]
+    if any(phrase in text for phrase in phrases):
+        return True
+    return bool(recommendation and int(recommendation.get("score", 0)) >= 6 and "skill" in text)
+
+
+def looks_like_personal_global_skill(text: str) -> bool:
+    phrases = [
+        "personal global skill",
+        "global skill",
+        "all projects",
+        "across all projects",
+        "every project",
+        "new skill",
+        "standalone skill",
+        "independent workflow",
+    ]
+    return any(phrase in text for phrase in phrases)
+
+
+def placement_target_hint(placement: str, recommendation: dict) -> str:
+    if placement == "skill_patch":
+        if recommendation:
+            return f"{recommendation.get('name', '')}/SKILL.md ({recommendation.get('path', '')})"
+        return "[specific existing local Skill / SKILL.md or references/*.md]"
+    if placement == "personal_global_skill":
+        return "[~/.codex/skills/<new-skill-name>/SKILL.md]"
+    return "[project rule location, project docs, or recorded local rule]"
+
+
+def normalize_placement(value: str, default: str = "") -> str:
+    placement = str(value or "").strip()
+    if not placement:
+        return default
+    if placement not in PROPOSAL_PLACEMENTS:
+        raise SystemExit(
+            f"Invalid placement: {placement!r}. Expected one of: {', '.join(sorted(PROPOSAL_PLACEMENTS))}"
+        )
+    return placement
+
+
+def infer_local_placement(args: argparse.Namespace | None, cluster: dict, records: list[dict]) -> dict:
+    recommendation = recommend_local_skill(args, cluster, records)
+    text = placement_text(cluster, records)
+    if looks_like_personal_global_skill(text):
+        placement = "personal_global_skill"
+        reason = "the signal explicitly asks for all-project or standalone Skill use"
+    elif looks_like_skill_patch(text, recommendation):
+        placement = "skill_patch"
+        if recommendation:
+            reason = f"an existing local Skill is the closest owner: {recommendation.get('name', '')}"
+        else:
+            reason = "the signal is about changing an existing Skill rule"
+    else:
+        placement = "project_rule"
+        reason = "same-project repetition shows current project need, without enough cross-project evidence"
+    owner = recommendation if placement == "skill_patch" else {}
+    return {
+        "placement_hint": placement,
+        "placement_reason": reason,
+        "recommended_skill": owner.get("name", ""),
+        "recommended_skill_path": owner.get("path", ""),
+        "recommended_skill_reason": owner.get("reason", ""),
+        "skill_candidates": [
+            {
+                "name": item.get("name", ""),
+                "path": item.get("path", ""),
+                "score": item.get("score", 0),
+            }
+            for item in ([owner] + owner.get("alternatives", []) if owner else [])
+        ],
+        "target_hint": placement_target_hint(placement, owner),
+    }
+
+
+def infer_global_placement(args: argparse.Namespace | None, cluster: dict, records: list[dict]) -> dict:
+    recommendation = recommend_local_skill(args, cluster, records)
+    text = placement_text(cluster, records)
+    if recommendation and int(recommendation.get("score", 0)) >= 3:
+        placement = "skill_patch"
+        reason = f"cross-project evidence fits an existing local Skill: {recommendation.get('name', '')}"
+    elif looks_like_skill_patch(text, recommendation):
+        placement = "skill_patch"
+        reason = "cross-project evidence is framed as an existing Skill enhancement"
+    else:
+        placement = "personal_global_skill"
+        reason = "cross-project evidence is transferable and no existing local Skill owns it clearly"
+    owner = recommendation if placement == "skill_patch" else {}
+    return {
+        "placement_hint": placement,
+        "placement_reason": reason,
+        "recommended_skill": owner.get("name", ""),
+        "recommended_skill_path": owner.get("path", ""),
+        "recommended_skill_reason": owner.get("reason", ""),
+        "skill_candidates": [
+            {
+                "name": item.get("name", ""),
+                "path": item.get("path", ""),
+                "score": item.get("score", 0),
+            }
+            for item in ([owner] + owner.get("alternatives", []) if owner else [])
+        ],
+        "target_hint": placement_target_hint(placement, owner),
+    }
+
+
 def normalize_method_key(signal: dict) -> str:
     operator = signal.get("operator", "other")
     operator = canonical_operator(operator)
@@ -567,7 +879,7 @@ def first_nonempty(records: list[dict], field: str) -> str:
     return ""
 
 
-def local_proposal_skeleton(cluster: dict, signals: list[dict]) -> dict:
+def local_proposal_skeleton(cluster: dict, signals: list[dict], args: argparse.Namespace | None = None) -> dict:
     evidence = [compact_text(signal.get("summary", ""), limit=140) for signal in signals[-3:]]
     evidence = [item for item in evidence if item]
     trigger = first_nonempty(signals, "trigger") or first_nonempty(signals, "context") or cluster.get("ready_reason", "")
@@ -580,15 +892,22 @@ def local_proposal_skeleton(cluster: dict, signals: list[dict]) -> dict:
         patch_hint = "[1-3 sentence transferable rule]"
     if transfer:
         patch_hint = f"{patch_hint} Use when {transfer}."
+    placement = infer_local_placement(args, cluster, signals)
     return {
-        "target_hint": "[target Skill / file / insertion location]",
+        "target_hint": placement["target_hint"],
+        "placement_hint": placement["placement_hint"],
+        "placement_reason": placement["placement_reason"],
+        "recommended_skill": placement["recommended_skill"],
+        "recommended_skill_path": placement["recommended_skill_path"],
+        "recommended_skill_reason": placement["recommended_skill_reason"],
+        "skill_candidates": placement["skill_candidates"],
         "patch_hint": compact_text(patch_hint, limit=260),
         "risk_hint": compact_text(risk, limit=180),
         "evidence": evidence,
     }
 
 
-def global_proposal_skeleton(cluster: dict, records: list[dict]) -> dict:
+def global_proposal_skeleton(cluster: dict, records: list[dict], args: argparse.Namespace | None = None) -> dict:
     evidence = list(cluster.get("summary_samples", []))[:3]
     trigger = first_nonempty(records, "trigger") or cluster.get("ready_reason", "")
     action = first_nonempty(records, "action") or (evidence[-1] if evidence else "")
@@ -600,8 +919,15 @@ def global_proposal_skeleton(cluster: dict, records: list[dict]) -> dict:
         patch_hint = "[1-3 sentence cross-project transferable rule]"
     if transfer:
         patch_hint = f"{patch_hint} Use when {transfer}."
+    placement = infer_global_placement(args, cluster, records)
     return {
-        "target_hint": "[target Skill / file / insertion location]",
+        "target_hint": placement["target_hint"],
+        "placement_hint": placement["placement_hint"],
+        "placement_reason": placement["placement_reason"],
+        "recommended_skill": placement["recommended_skill"],
+        "recommended_skill_path": placement["recommended_skill_path"],
+        "recommended_skill_reason": placement["recommended_skill_reason"],
+        "skill_candidates": placement["skill_candidates"],
         "patch_hint": compact_text(patch_hint, limit=260),
         "risk_hint": compact_text(risk, limit=180),
         "evidence": evidence,
@@ -933,7 +1259,7 @@ def collect_global_summary(args: argparse.Namespace, import_result: dict | None 
                 "strength_sum": int(cluster.get("strength_sum", 0)),
                 "ready_reason": cluster.get("ready_reason", ""),
                 "samples": list(cluster.get("summary_samples", []))[:3],
-                "skeleton": global_proposal_skeleton(cluster, sample_records),
+                "skeleton": global_proposal_skeleton(cluster, sample_records, args),
             })
 
     pending_proposals = []
@@ -943,6 +1269,8 @@ def collect_global_summary(args: argparse.Namespace, import_result: dict | None 
                 "proposal_id": proposal.get("id", ""),
                 "method_fingerprint": proposal.get("method_fingerprint", ""),
                 "decision": proposal.get("decision", ""),
+                "placement": proposal.get("placement", ""),
+                "recommended_skill": proposal.get("recommended_skill", ""),
                 "status": proposal.get("status", ""),
                 "target": proposal.get("target", ""),
             })
@@ -992,8 +1320,11 @@ def command_global_cycle(args: argparse.Namespace) -> None:
         for proposal in summary["pending_proposals"]:
             print(
                 f"- {proposal['proposal_id']}  status={proposal['status']}  "
-                f"decision={proposal['decision']}  method={proposal['method_fingerprint']}"
+                f"decision={proposal['decision']}  placement={proposal.get('placement', '')}  "
+                f"method={proposal['method_fingerprint']}"
             )
+            if proposal.get("recommended_skill"):
+                print(f"  recommended_skill: {proposal.get('recommended_skill')}")
 
     if summary["ready_clusters"]:
         print("\nReady global clusters:")
@@ -1003,6 +1334,14 @@ def command_global_cycle(args: argparse.Namespace) -> None:
                 f"evidence={cluster['evidence_count']}  strength={cluster['strength_sum']}  "
                 f"method={cluster['method_key']}"
             )
+            skeleton = cluster.get("skeleton", {})
+            if skeleton:
+                print(f"  placement_hint: {skeleton.get('placement_hint', '')}")
+                print(f"  placement_reason: {skeleton.get('placement_reason', '')}")
+                if skeleton.get("recommended_skill"):
+                    print(f"  recommended_skill: {skeleton.get('recommended_skill', '')}")
+                    print(f"  recommended_skill_path: {skeleton.get('recommended_skill_path', '')}")
+                print(f"  target_hint: {skeleton.get('target_hint', '')}")
 
 
 def command_global_status(args: argparse.Namespace) -> None:
@@ -1083,6 +1422,19 @@ def command_global_propose(args: argparse.Namespace) -> None:
     if cluster.get("status") not in {"ready", "proposed"} and not args.force:
         raise SystemExit("Global cluster is not ready. Use --force only for an explicit immediate trigger.")
 
+    records_by_id = {record.get("id", ""): record for record in read_jsonl(global_signal_path(args))}
+    sample_records = [
+        records_by_id[sid]
+        for sid in cluster.get("sample_global_signal_ids", [])
+        if sid in records_by_id
+    ]
+    skeleton = global_proposal_skeleton(cluster, sample_records, args)
+    placement = normalize_placement(args.placement, skeleton.get("placement_hint", "personal_global_skill"))
+    placement_reason = args.placement_reason or skeleton.get("placement_reason", "")
+    recommended_skill = args.recommended_skill or skeleton.get("recommended_skill", "")
+    recommended_skill_path = args.recommended_skill_path or skeleton.get("recommended_skill_path", "")
+    target = args.target or skeleton.get("target_hint", "") or "[target Skill / file / insertion location]"
+
     proposal_id = make_id("gprop")
     proposal = {
         "id": proposal_id,
@@ -1093,14 +1445,19 @@ def command_global_propose(args: argparse.Namespace) -> None:
         "decision": args.decision,
         "trigger": cluster.get("ready_reason") or "forced immediate global proposal",
         "evidence_global_signal_ids": list(cluster.get("sample_global_signal_ids", []))[-3:],
-        "target": args.target or "[target Skill / file / insertion location]",
+        "placement": placement,
+        "placement_reason": placement_reason,
+        "recommended_skill": recommended_skill,
+        "recommended_skill_path": recommended_skill_path,
+        "recommended_skill_reason": skeleton.get("recommended_skill_reason", ""),
+        "target": target,
         "patch": args.patch or "[1-3 sentence patch or structured operator definition]",
         "risk": args.risk or "[main risk or side effect]",
         "project_count": len(set(cluster.get("project_hashes", []))),
         "evidence_count": int(cluster.get("evidence_count", 0)),
         "strength_sum": int(cluster.get("strength_sum", 0)),
         "status": "pending_user_gate",
-        "user_gate": "yes / no / revision",
+        "user_gate": PLACEMENT_USER_GATE,
     }
     append_jsonl(global_proposal_path(args), proposal)
     cluster["status"] = "proposed"
@@ -1120,8 +1477,20 @@ Trigger:
 Decision:
 {proposal['decision']}
 
+Recommended placement:
+{proposal['placement']}
+
+Placement reason:
+{proposal['placement_reason']}
+
 Evidence:
 {evidence_text}
+
+Recommended local Skill:
+{proposal['recommended_skill'] or '[none]'}
+
+Recommended Skill path:
+{proposal['recommended_skill_path'] or '[none]'}
 
 Target:
 {proposal['target']}
@@ -1133,7 +1502,8 @@ Risk:
 {proposal['risk']}
 
 User gate:
-Choose: Yes / No / Revision
+Choose: Project Rule / Skill Patch / Personal Global Skill / No / Revision
+(Choosing a placement counts as Yes for that placement.)
 
 Proposal ID:
 {proposal_id}
@@ -1145,6 +1515,12 @@ def command_global_apply(args: argparse.Namespace) -> None:
     proposals, proposal = get_global_proposal(args, args.proposal_id)
     if proposal.get("status") != "pending_user_gate" and not args.force:
         raise SystemExit("Global proposal is not pending user gate. Use --force to override.")
+
+    final_placement = normalize_placement(args.placement, proposal.get("placement", ""))
+    if args.placement:
+        proposal["placement"] = final_placement
+    if args.placement_reason:
+        proposal["placement_reason"] = args.placement_reason
 
     applied_path = ""
     if args.target_skill_path:
@@ -1182,6 +1558,10 @@ def command_global_apply(args: argparse.Namespace) -> None:
         "target_skill": args.target_skill or proposal.get("target", ""),
         "edit_summary": args.summary or proposal.get("patch", "")[:160],
         "decision": proposal.get("decision", ""),
+        "placement": proposal.get("placement", ""),
+        "placement_reason": proposal.get("placement_reason", ""),
+        "recommended_skill": proposal.get("recommended_skill", ""),
+        "recommended_skill_path": proposal.get("recommended_skill_path", ""),
         "applied_path": applied_path,
     }
     append_jsonl(adopted_global_path(args), adopt_record)
@@ -1358,6 +1738,12 @@ def command_propose(args: argparse.Namespace) -> None:
 
     signals = find_signals_for_cluster(args, args.cluster_key)
     evidence = signals[-3:]
+    skeleton = local_proposal_skeleton(cluster, signals, args)
+    placement = normalize_placement(args.placement, skeleton.get("placement_hint", "project_rule"))
+    placement_reason = args.placement_reason or skeleton.get("placement_reason", "")
+    recommended_skill = args.recommended_skill or skeleton.get("recommended_skill", "")
+    recommended_skill_path = args.recommended_skill_path or skeleton.get("recommended_skill_path", "")
+    target = args.target or skeleton.get("target_hint", "") or "[target Skill / file / insertion location]"
     proposal_id = make_id("prop")
     proposal = {
         "id": proposal_id,
@@ -1366,11 +1752,16 @@ def command_propose(args: argparse.Namespace) -> None:
         "decision": args.decision,
         "trigger": cluster.get("ready_reason") or "forced immediate proposal",
         "evidence_signal_ids": [s["id"] for s in evidence],
-        "target": args.target or "[target Skill / file / insertion location]",
+        "placement": placement,
+        "placement_reason": placement_reason,
+        "recommended_skill": recommended_skill,
+        "recommended_skill_path": recommended_skill_path,
+        "recommended_skill_reason": skeleton.get("recommended_skill_reason", ""),
+        "target": target,
         "patch": args.patch or "[1-3 sentence patch or structured operator definition]",
         "risk": args.risk or "[main risk or side effect]",
         "status": "pending_user_gate",
-        "user_gate": "yes / no / revision",
+        "user_gate": PLACEMENT_USER_GATE,
     }
     append_jsonl(data_dir(args) / "proposals.jsonl", proposal)
     cluster["status"] = "proposed"
@@ -1390,8 +1781,20 @@ Trigger:
 Decision:
 {proposal['decision']}
 
+Recommended placement:
+{proposal['placement']}
+
+Placement reason:
+{proposal['placement_reason']}
+
 Evidence:
 {evidence_text}
+
+Recommended local Skill:
+{proposal['recommended_skill'] or '[none]'}
+
+Recommended Skill path:
+{proposal['recommended_skill_path'] or '[none]'}
 
 Target:
 {proposal['target']}
@@ -1403,7 +1806,8 @@ Risk:
 {proposal['risk']}
 
 User gate:
-Choose: Yes / No / Revision
+Choose: Project Rule / Skill Patch / Personal Global Skill / No / Revision
+(Choosing a placement counts as Yes for that placement.)
 
 Proposal ID:
 {proposal_id}
@@ -1431,6 +1835,12 @@ def command_apply_proposal(args: argparse.Namespace) -> None:
     proposals, proposal = get_proposal(args, args.proposal_id)
     if proposal.get("status") != "pending_user_gate" and not args.force:
         raise SystemExit("Proposal is not pending user gate. Use --force to override.")
+
+    final_placement = normalize_placement(args.placement, proposal.get("placement", ""))
+    if args.placement:
+        proposal["placement"] = final_placement
+    if args.placement_reason:
+        proposal["placement_reason"] = args.placement_reason
 
     applied_path = ""
     if args.target_skill_path:
@@ -1467,6 +1877,10 @@ def command_apply_proposal(args: argparse.Namespace) -> None:
         "target_skill": args.target_skill or proposal.get("target", ""),
         "edit_summary": args.summary or proposal.get("patch", "")[:160],
         "decision": proposal.get("decision", ""),
+        "placement": proposal.get("placement", ""),
+        "placement_reason": proposal.get("placement_reason", ""),
+        "recommended_skill": proposal.get("recommended_skill", ""),
+        "recommended_skill_path": proposal.get("recommended_skill_path", ""),
         "applied_path": applied_path,
     }
     append_jsonl(data_dir(args) / "adopted-edits.jsonl", adopt_record)
@@ -1595,7 +2009,7 @@ def collect_runtime_summary(args: argparse.Namespace) -> dict:
                 "strength_sum": int(cluster.get("strength_sum", 0)),
                 "ready_reason": cluster.get("ready_reason", ""),
                 "samples": [compact_text(s.get("summary", ""), 140) for s in cluster_signals[-3:]],
-                "skeleton": local_proposal_skeleton(cluster, cluster_signals),
+                "skeleton": local_proposal_skeleton(cluster, cluster_signals, args),
             })
 
     pending_proposals = []
@@ -1605,6 +2019,8 @@ def collect_runtime_summary(args: argparse.Namespace) -> dict:
                 "proposal_id": proposal.get("id", ""),
                 "cluster_key": proposal.get("cluster_key", ""),
                 "decision": proposal.get("decision", ""),
+                "placement": proposal.get("placement", ""),
+                "recommended_skill": proposal.get("recommended_skill", ""),
                 "status": proposal.get("status", ""),
                 "target": proposal.get("target", ""),
             })
@@ -1672,16 +2088,22 @@ def command_cycle(args: argparse.Namespace) -> None:
         for proposal in summary["pending_proposals"]:
             print(
                 f"- {proposal['proposal_id']}  status={proposal['status']}  "
-                f"decision={proposal['decision']}  cluster={proposal['cluster_key']}"
+                f"decision={proposal['decision']}  placement={proposal.get('placement', '')}  "
+                f"cluster={proposal['cluster_key']}"
             )
+            if proposal.get("recommended_skill"):
+                print(f"  recommended_skill: {proposal.get('recommended_skill')}")
 
     if global_summary and global_summary["pending_proposals"]:
         print("\nPending global user gates:")
         for proposal in global_summary["pending_proposals"]:
             print(
                 f"- {proposal['proposal_id']}  status={proposal['status']}  "
-                f"decision={proposal['decision']}  method={proposal['method_fingerprint']}"
+                f"decision={proposal['decision']}  placement={proposal.get('placement', '')}  "
+                f"method={proposal['method_fingerprint']}"
             )
+            if proposal.get("recommended_skill"):
+                print(f"  recommended_skill: {proposal.get('recommended_skill')}")
 
     if summary["ready_clusters"]:
         print("\nReady clusters:")
@@ -1692,9 +2114,18 @@ def command_cycle(args: argparse.Namespace) -> None:
             )
             skeleton = cluster.get("skeleton", {})
             if skeleton:
+                print(f"  placement_hint: {skeleton.get('placement_hint', '')}")
+                print(f"  placement_reason: {skeleton.get('placement_reason', '')}")
+                if skeleton.get("recommended_skill"):
+                    print(f"  recommended_skill: {skeleton.get('recommended_skill', '')}")
+                    print(f"  recommended_skill_path: {skeleton.get('recommended_skill_path', '')}")
+                print(f"  target_hint: {skeleton.get('target_hint', '')}")
                 print(f"  patch_hint: {skeleton.get('patch_hint', '')}")
                 print(f"  risk_hint: {skeleton.get('risk_hint', '')}")
-        print("\nNext: run `propose` with the refined skeleton, then ask the user Yes / No / Revision.")
+        print(
+            "\nNext: run `propose` with the refined skeleton, then ask the user to choose "
+            "Project Rule / Skill Patch / Personal Global Skill / No / Revision."
+        )
 
     if global_summary and global_summary["ready_clusters"]:
         print("\nReady global clusters:")
@@ -1706,9 +2137,18 @@ def command_cycle(args: argparse.Namespace) -> None:
             )
             skeleton = cluster.get("skeleton", {})
             if skeleton:
+                print(f"  placement_hint: {skeleton.get('placement_hint', '')}")
+                print(f"  placement_reason: {skeleton.get('placement_reason', '')}")
+                if skeleton.get("recommended_skill"):
+                    print(f"  recommended_skill: {skeleton.get('recommended_skill', '')}")
+                    print(f"  recommended_skill_path: {skeleton.get('recommended_skill_path', '')}")
+                print(f"  target_hint: {skeleton.get('target_hint', '')}")
                 print(f"  patch_hint: {skeleton.get('patch_hint', '')}")
                 print(f"  risk_hint: {skeleton.get('risk_hint', '')}")
-        print("\nNext: run `global-propose` with the refined skeleton, then ask the user Yes / No / Revision.")
+        print(
+            "\nNext: run `global-propose` with the refined skeleton, then ask the user to choose "
+            "Skill Patch / Personal Global Skill / No / Revision."
+        )
     elif not summary["pending_proposals"] and not summary["ready_clusters"] and not (
         global_summary and (global_summary["pending_proposals"] or global_summary["ready_clusters"])
     ):
@@ -1776,6 +2216,8 @@ def command_validate(args: argparse.Namespace) -> None:
                     errors.append(f"{path}:{index}: proposal references missing cluster_key")
                 if record.get("decision") not in PROPOSAL_DECISIONS:
                     errors.append(f"{path}:{index}: invalid decision: {record.get('decision')!r}")
+                if "placement" in record and record.get("placement") not in PROPOSAL_PLACEMENTS:
+                    errors.append(f"{path}:{index}: invalid placement: {record.get('placement')!r}")
                 if record.get("status") not in PROPOSAL_STATUSES:
                     errors.append(f"{path}:{index}: invalid proposal status: {record.get('status')!r}")
                 for sid in record.get("evidence_signal_ids", []):
@@ -1870,6 +2312,8 @@ def _validate_global_runtime(args: argparse.Namespace, errors: list[str]) -> Non
                     errors.append(f"{path}:{index}: proposal references missing method_fingerprint")
                 if record.get("decision") not in PROPOSAL_DECISIONS:
                     errors.append(f"{path}:{index}: invalid decision: {record.get('decision')!r}")
+                if "placement" in record and record.get("placement") not in PROPOSAL_PLACEMENTS:
+                    errors.append(f"{path}:{index}: invalid placement: {record.get('placement')!r}")
                 if record.get("status") not in PROPOSAL_STATUSES:
                     errors.append(f"{path}:{index}: invalid proposal status: {record.get('status')!r}")
                 for sid in record.get("evidence_global_signal_ids", []):
@@ -2061,6 +2505,10 @@ def build_parser() -> argparse.ArgumentParser:
     propose_parser = subparsers.add_parser("propose", help="Create a user-gated evolution proposal for a ready cluster")
     propose_parser.add_argument("--cluster-key", required=True)
     propose_parser.add_argument("--decision", default="proposed_edit", choices=sorted(PROPOSAL_DECISIONS))
+    propose_parser.add_argument("--placement", default="", choices=sorted(PROPOSAL_PLACEMENTS))
+    propose_parser.add_argument("--placement-reason", default="")
+    propose_parser.add_argument("--recommended-skill", default="")
+    propose_parser.add_argument("--recommended-skill-path", default="")
     propose_parser.add_argument("--target", default="")
     propose_parser.add_argument("--patch", default="")
     propose_parser.add_argument("--risk", default="")
@@ -2071,6 +2519,8 @@ def build_parser() -> argparse.ArgumentParser:
     apply_parser.add_argument("--proposal-id", required=True)
     apply_parser.add_argument("--target-skill", default="")
     apply_parser.add_argument("--summary", default="")
+    apply_parser.add_argument("--placement", default="", choices=sorted(PROPOSAL_PLACEMENTS))
+    apply_parser.add_argument("--placement-reason", default="")
     apply_parser.add_argument("--target-skill-path", default="")
     apply_parser.add_argument("--patch", default="")
     apply_parser.add_argument("--force", action="store_true")
@@ -2091,6 +2541,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     global_propose_parser.add_argument("--method-fingerprint", required=True)
     global_propose_parser.add_argument("--decision", default="proposed_edit", choices=sorted(PROPOSAL_DECISIONS))
+    global_propose_parser.add_argument("--placement", default="", choices=sorted(PROPOSAL_PLACEMENTS))
+    global_propose_parser.add_argument("--placement-reason", default="")
+    global_propose_parser.add_argument("--recommended-skill", default="")
+    global_propose_parser.add_argument("--recommended-skill-path", default="")
     global_propose_parser.add_argument("--target", default="")
     global_propose_parser.add_argument("--patch", default="")
     global_propose_parser.add_argument("--risk", default="")
@@ -2110,6 +2564,8 @@ def build_parser() -> argparse.ArgumentParser:
     global_apply_parser.add_argument("--proposal-id", required=True)
     global_apply_parser.add_argument("--target-skill", default="")
     global_apply_parser.add_argument("--summary", default="")
+    global_apply_parser.add_argument("--placement", default="", choices=sorted(PROPOSAL_PLACEMENTS))
+    global_apply_parser.add_argument("--placement-reason", default="")
     global_apply_parser.add_argument("--target-skill-path", default="")
     global_apply_parser.add_argument("--patch", default="")
     global_apply_parser.add_argument("--force", action="store_true")

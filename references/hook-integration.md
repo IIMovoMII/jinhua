@@ -29,7 +29,7 @@ Hooks may call `log-signal` only when the platform can provide sanitized fields.
 ## Safety Rules
 
 - Do not auto-apply Skill edits.
-- Do not bypass Yes / No / Revision.
+- Do not bypass the placement-aware user gate: Project Rule / Skill Patch / Personal Global Skill / No / Revision.
 - Do not save original user text.
 - Do not copy raw project paths into global records.
 - Do not make hooks responsible for methodology judgment.

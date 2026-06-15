@@ -84,6 +84,14 @@
 - `status`
 - `user_gate`
 
+新提案建议包含：
+
+- `placement`：落点，取值为 `project_rule`、`skill_patch` 或 `personal_global_skill`。
+- `placement_reason`：为什么推荐这个落点。
+- `recommended_skill`：推荐增强的本地 Skill 名称。
+- `recommended_skill_path`：推荐增强的本地 `SKILL.md` 路径。
+- `recommended_skill_reason`：为什么推荐这个 Skill。
+
 提案状态包括：
 
 - `pending_user_gate`：等待用户确认。
@@ -102,6 +110,10 @@
 - `target_skill`
 - `edit_summary`
 - `decision`
+- `placement`
+- `placement_reason`
+- `recommended_skill`
+- `recommended_skill_path`
 - `applied_path`
 
 ## rejected-proposals.jsonl
@@ -206,6 +218,14 @@
 - `strength_sum`
 - `status`
 - `user_gate`
+
+新全局提案建议包含：
+
+- `placement`：通常是 `skill_patch` 或 `personal_global_skill`。
+- `placement_reason`：为什么推荐这个落点。
+- `recommended_skill`：如果适合增强已有 Skill，这里记录推荐 Skill。
+- `recommended_skill_path`：推荐 Skill 的本地路径。
+- `recommended_skill_reason`：推荐理由。
 
 ## project-index.json
 

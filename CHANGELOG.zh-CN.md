@@ -2,6 +2,12 @@
 
 > [CHANGELOG.md](CHANGELOG.md) 是英文主版本；本文件是中文更新说明。
 
+## 2026-06-15 带落点的用户确认
+
+- 新增明确提案落点：`project_rule`、`skill_patch`、`personal_global_skill`。
+- `skill_patch` 提案会推荐具体本地 Skill，用户不需要自己找目标 Skill。
+- `cycle`、`propose`、`global-propose`、`apply-proposal`、`global-apply` 都会携带落点字段，形成完整闭环。
+
 ## 2026-06-15 公开发布
 
 - 发布 `jinhua`：一个用于 Skill 进化的本地闭环工具，适用于 Codex、Claude Code 等支持 Skill 的编程智能体（Agent）。

@@ -6,13 +6,15 @@
 
 它不会把每次聊天都记下来，也不会偷偷改 Skill。它只记录脱敏后的方法论信号；只有证据足够强、能写成明确提案时，才请用户做一次确认。
 
-确认入口始终是：
+确认入口现在是“带落点的确认”：
 
 ```text
-Yes / No / Revision
+Project Rule / Skill Patch / Personal Global Skill / No / Revision
 ```
 
-- `Yes`：采纳。
+- `Project Rule`：作为当前项目的轻量规则采纳。
+- `Skill Patch`：增强某个具体的已有本地 Skill。
+- `Personal Global Skill`：做成个人全局 Skill，或面向所有项目生效的规则。
 - `No`：拒绝，并让这类提案暂时冷却。
 - `Revision`：先按你的意见修改，再重新确认。
 
@@ -100,21 +102,29 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
   --cluster-key verification_path:read_readme_and_source_before_recommending_projects \
   --decision proposed_edit \
+  --placement skill_patch \
   --target "target-skill/SKILL.md / research workflow" \
   --patch "When recommending reusable external projects for adoption, verify the README and relevant source before claiming usefulness." \
   --risk "Can add work when the user only wants quick pointers."
 ```
 
-用户说 `Yes` 后记录采纳：
+落点分三层：
+
+- `project_rule`：轻量项目规则，适合只在当前项目反复出现的经验。
+- `skill_patch`：增强已有本地 Skill。jinhua 会推荐最合适的具体 Skill 和路径，不需要用户自己找。
+- `personal_global_skill`：个人全局 Skill 或所有项目规则，适合明确要跨项目生效的经验。
+
+用户选择某个落点后记录采纳：
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal \
   --proposal-id <prop_id> \
+  --placement skill_patch \
   --target-skill target-skill \
   --summary "Added source-backed recommendation rule"
 ```
 
-用户说 `No` 后记录拒绝：
+用户选择 `No` 后记录拒绝：
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal \

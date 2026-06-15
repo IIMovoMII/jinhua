@@ -8,10 +8,10 @@ It helps the model notice reusable methodology signals during real work, cluster
 
 Chinese visual guide: [docs/jinhua-logic.html](docs/jinhua-logic.html)
 
-The user gate is always:
+The user gate is placement-aware:
 
 ```text
-Yes / No / Revision
+Project Rule / Skill Patch / Personal Global Skill / No / Revision
 ```
 
 User-facing dialogue follows the user's current conversation language. Durable data, CLI identifiers, JSON fields, and generated Skill files may remain English unless the user asks otherwise.
@@ -68,16 +68,24 @@ When a local cluster is ready:
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
   --cluster-key verification_path:read_readme_and_source_before_recommending_projects \
   --decision proposed_edit \
+  --placement skill_patch \
   --target "target-skill/SKILL.md / research workflow" \
   --patch "When recommending reusable external projects for adoption, verify the README and relevant source before claiming usefulness." \
   --risk "Can add work when the user only wants quick pointers."
 ```
 
-If the user says yes:
+Placement choices:
+
+- `project_rule`: lightweight current-project rule.
+- `skill_patch`: enhance a concrete existing local Skill. jinhua recommends the best matching local Skill and path; the user should not have to search manually.
+- `personal_global_skill`: personal global Skill or all-project rule.
+
+If the user chooses a placement:
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal \
   --proposal-id <prop_id> \
+  --placement skill_patch \
   --target-skill target-skill \
   --summary "Added source-backed recommendation rule"
 ```

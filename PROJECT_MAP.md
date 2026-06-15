@@ -7,8 +7,8 @@
 Responsibility split:
 
 - **Skill**: decides whether a signal is reusable, transferable, risky, duplicated, or worth proposing.
-- **CLI**: records signals, clusters evidence, imports global promotion evidence, emits skeletons, records gate outcomes, suggests merge candidates, compacts, and validates.
-- **User**: gates proposals with Yes / No / Revision.
+- **CLI**: records signals, clusters evidence, imports global promotion evidence, emits placement-aware skeletons, records gate outcomes, suggests merge candidates, compacts, and validates.
+- **User**: gates proposals with Project Rule / Skill Patch / Personal Global Skill / No / Revision.
 
 ## Main Files
 
@@ -95,5 +95,6 @@ The public CLI surface is intentionally focused on the closed loop above.
 - Do not interrupt the user for weak single signals.
 - Do not auto-apply Skill edits without a user gate.
 - Do not count duplicate same-project signals as cross-project repetition.
+- Do not ask the user to find the target Skill when `skill_patch` is the recommended placement.
 - Do not add daemon, database, vector store, dashboard, or ML core loop.
 - Do not add broad observation commands as first-class workflow.

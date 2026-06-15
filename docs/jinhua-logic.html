@@ -391,7 +391,7 @@
             <span class="chip">触发时运行自动检查（cycle）</span>
             <span class="chip">弱信号静默忽略</span>
             <span class="chip">强证据才提案</span>
-            <span class="chip">同意 / 拒绝 / 修订（Yes / No / Revision）</span>
+            <span class="chip">项目规则 / 增强 Skill / 全局 Skill / 拒绝 / 修订</span>
             <span class="chip">跨项目只晋升压缩证据</span>
           </div>
         </div>
@@ -430,7 +430,7 @@
         <article class="step">
           <span class="tag t-coral">确认</span>
           <b>用户门控</b>
-          <p>只有就绪（ready）后才提出提案（proposal）。用户选择同意、拒绝或修订（Yes / No / Revision），结果写回账本。</p>
+          <p>只有就绪（ready）后才提出提案（proposal）。用户选择项目规则（Project Rule）、增强已有 Skill（Skill Patch）、个人全局 Skill（Personal Global Skill）、拒绝（No）或修订（Revision），结果写回账本。</p>
         </article>
       </div>
     </section>
@@ -452,13 +452,13 @@
           </article>
           <article class="branch">
             <h3>提案路径</h3>
-            <p>已就绪聚类（ready cluster）先产出提案骨架（proposal skeleton），模型压缩成 1 到 3 句修改说明（patch）和主要风险（risk），再交给用户确认。</p>
+            <p>已就绪聚类（ready cluster）先产出提案骨架（proposal skeleton），包括建议落点（placement hint）和具体本地 Skill 推荐；模型再压缩成 1 到 3 句修改说明（patch）和主要风险（risk）。</p>
           </article>
         </div>
         <div class="branches">
           <article class="branch">
-            <h3>同意（Yes）</h3>
-            <p>记录采纳，必要时把最小可用修改写入目标技能（Skill），然后再次运行自动检查（cycle）。</p>
+            <h3>选择落点（Placement）</h3>
+            <p>用户可以选择项目规则、增强已有 Skill 或个人全局 Skill。选择某个落点，就等价于对这个落点同意（Yes）。</p>
           </article>
           <article class="branch warn">
             <h3>拒绝（No）</h3>
@@ -522,7 +522,7 @@
         </article>
         <article class="metric">
           <strong style="color: var(--coral);">门控</strong>
-          <p>全局晋升也必须展示提案（proposal），并经过用户同意、拒绝或修订（Yes / No / Revision）。</p>
+          <p>全局晋升也必须展示提案（proposal），并经过带落点的用户确认：增强已有 Skill（Skill Patch）、个人全局 Skill（Personal Global Skill）、拒绝（No）或修订（Revision）。</p>
         </article>
       </div>
     </section>
@@ -543,7 +543,7 @@
         </article>
         <article class="check">
           <h3>更少打扰</h3>
-          <p>未达到阈值时只继续任务。达到阈值后只展示紧凑提案（proposal），不展开长篇解释。</p>
+          <p>未达到阈值时只继续任务。达到阈值后只展示紧凑提案（proposal），并直接给出最小有用落点，不让用户自己找目标 Skill。</p>
         </article>
       </div>
     </section>

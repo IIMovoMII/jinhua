@@ -36,7 +36,7 @@ Skill 安装后，Codex 不需要用户额外配置。`cycle` 会在需要时初
 ## 安全规则
 
 - 不要自动应用 Skill 修改。
-- 不要绕过 `Yes` / `No` / `Revision`。
+- 不要绕过带落点的用户确认门：`Project Rule` / `Skill Patch` / `Personal Global Skill` / `No` / `Revision`。
 - 不要保存用户原文。
 - 不要把原始项目路径复制到全局记录。
 - 不要让 hooks 负责方法论判断。

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-06-15 Placement-Aware Gate
+
+- Added explicit proposal placements: `project_rule`, `skill_patch`, and `personal_global_skill`.
+- Added local Skill recommendation for `skill_patch` proposals so users do not need to find the target Skill manually.
+- Updated `cycle`, `propose`, `global-propose`, `apply-proposal`, and `global-apply` to carry placement fields through the closed loop.
+
 ## 2026-06-15 Public Release
 
 - Published `jinhua` as a compact Skill + CLI for user-gated Skill evolution.

@@ -1,6 +1,6 @@
 ---
 name: jinhua
-description: Methodology Skill evolution assistant for Agent Skills-compatible coding agents, including Claude Code and Codex. Use when task work reveals reusable prompting habits, user corrections, repeated reasoning failures, successful reasoning traces, Skill self-improvement opportunities, compact Skill update proposals, or when a user asks to make Skill evolution automatic/closed-loop. The Skill proactively runs its cycle command, silently accumulates reusable methodology signals, clusters them locally and globally, and asks the user only for a Yes / No / Revision gate when evidence is strong enough. Do not use for ordinary prompt writing, generic memory, personal preferences, or normal task execution without a methodology signal.
+description: Methodology Skill evolution assistant for Agent Skills-compatible coding agents, including Claude Code and Codex. Use when task work reveals reusable prompting habits, user corrections, repeated reasoning failures, successful reasoning traces, Skill self-improvement opportunities, compact Skill update proposals, or when a user asks to make Skill evolution automatic/closed-loop. The Skill proactively runs its cycle command, silently accumulates reusable methodology signals, clusters them locally and globally, recommends the right placement layer, and asks the user for a placement-aware gate when evidence is strong enough. Do not use for ordinary prompt writing, generic memory, personal preferences, or normal task execution without a methodology signal.
 ---
 
 # jinhua
@@ -9,9 +9,11 @@ description: Methodology Skill evolution assistant for Agent Skills-compatible c
 
 Turn repeated task experience into small, user-gated Skill improvements.
 
-The model handles detection, clustering, abstraction, proposal drafting, and CLI invocation. The user is only the risk gate:
+The model handles detection, clustering, abstraction, placement recommendation, proposal drafting, and CLI invocation. The user is only the risk gate:
 
-- `Yes`: apply or record the proposal.
+- `Project Rule`: accept as a lightweight current-project rule.
+- `Skill Patch`: accept as an enhancement to a specific existing local Skill.
+- `Personal Global Skill`: accept as a personal global Skill or all-project rule.
 - `No`: reject it and cool down the cluster.
 - `Revision`: record revision feedback, rewrite, and ask the same gate again.
 
@@ -42,7 +44,7 @@ Keep durable data and executable identifiers stable:
 
 - CLI commands, option names, JSON fields, ids, file paths, and operator ids stay in English.
 - Project experience records, signal summaries, and generated Skill files may stay in English unless the user asks otherwise.
-- The user gate may be localized for display, but include the canonical tokens `Yes`, `No`, and `Revision` so the decision is unambiguous.
+- The user gate may be localized for display, but include the canonical tokens `Yes`, `No`, and `Revision` so the decision is unambiguous. A placement choice counts as `Yes` for that placement.
 
 ## Automatic Checkpoint
 
@@ -58,7 +60,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> cycl
 2. Summarizes local signals, clusters, and pending gates.
 3. Imports active local signals into the installed Skill's `global-data/`.
 4. Summarizes cross-project method clusters and pending global gates.
-5. Prints proposal skeleton hints for ready clusters.
+5. Prints proposal skeleton hints for ready clusters, including `placement_hint` and any concrete local Skill recommendation.
 
 Run `cycle` at the start of a triggered invocation, after any ledger-changing command, and before finishing substantial work that contained a clear methodology signal.
 
@@ -134,6 +136,8 @@ After `log-signal`, run `cycle`.
 
 ## Local Proposal Gate
 
+Local repetition means current need. If the same project repeatedly produces the same reusable method, propose a local settling point; do not wait for cross-project evidence. Cross-project evidence is required only for global promotion.
+
 Generate a proposal when one local cluster reaches any trigger:
 
 - At least 3 active signals.
@@ -141,16 +145,23 @@ Generate a proposal when one local cluster reaches any trigger:
 - The user explicitly asks to remember, crystallize, write into a Skill, or evolve now.
 - A high-cost failure is reusable and urgent.
 
-Use the `cycle` skeleton as a starting point, refine target, patch, and risk, then run:
+Use the `cycle` skeleton as a starting point, refine placement, target, patch, and risk, then run:
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> propose \
   --cluster-key <cluster-key> \
   --decision proposed_edit \
+  --placement <project_rule|skill_patch|personal_global_skill> \
   --target "<target Skill / file / insertion location>" \
   --patch "<1-3 sentence patch>" \
   --risk "<main side effect>"
 ```
+
+Placement ladder:
+
+- `project_rule`: lightweight rule for the current project or workspace. Use when repetition shows local need but there is not enough cross-project transfer evidence.
+- `skill_patch`: targeted enhancement to an existing local Skill. The agent must recommend the most suitable concrete local Skill and path; do not ask the user to find it.
+- `personal_global_skill`: heavier personal global Skill or all-project rule. Use when the user explicitly asks for all-project behavior, or when global promotion evidence supports it.
 
 Show the user this structure, rendered in the user's current conversation language:
 
@@ -163,8 +174,20 @@ Trigger:
 Decision:
 proposed_edit / crystallize_experience / merge_rule / experimental_operator / core_operator_promotion / reject
 
+Recommended placement:
+project_rule / skill_patch / personal_global_skill
+
+Placement reason:
+[why this layer is the smallest useful landing point]
+
 Evidence:
 [up to 3 representative signal summaries]
+
+Recommended local Skill:
+[specific local Skill name, required when placement is skill_patch]
+
+Recommended Skill path:
+[local SKILL.md path, required when placement is skill_patch]
 
 Target:
 [target Skill / file / insertion location]
@@ -176,7 +199,8 @@ Risk:
 [main side effect]
 
 User gate:
-Choose: Yes / No / Revision
+Choose: Project Rule / Skill Patch / Personal Global Skill / No / Revision
+(Choosing a placement counts as Yes for that placement.)
 ```
 
 Keep `decision` values, proposal ids, command names, option names, file paths, and code snippets in English even when the surrounding explanation is localized.
@@ -202,13 +226,13 @@ Use `global-merge-suggestions` to inspect similar global clusters. It never muta
 
 For local proposals:
 
-- `Yes`: run `apply-proposal`, then `cycle`.
+- `Project Rule`, `Skill Patch`, or `Personal Global Skill`: run `apply-proposal --placement <chosen-placement>`, then `cycle`.
 - `No`: run `reject-proposal`, then `cycle`.
 - `Revision`: run `reject-proposal --revision`, rewrite, and ask again.
 
 For global proposals:
 
-- `Yes`: run `global-apply`, then `cycle`.
+- `Skill Patch` or `Personal Global Skill`: run `global-apply --placement <chosen-placement>`, then `cycle`.
 - `No`: run `global-reject`, then `cycle`.
 - `Revision`: run `global-reject --revision`, rewrite, and ask again.
 
@@ -230,8 +254,9 @@ A complete loop is successful when:
 2. `cycle` confirms state and pending gates.
 3. The signal is logged and clustered without interrupting the user.
 4. Ready clusters produce proposal skeletons.
-5. The model creates a compact Skill Evolution Proposal.
-6. The user chooses Yes / No / Revision.
-7. The accepted or rejected outcome is recorded.
-8. Accepted changes are applied or recorded with the smallest useful patch.
-9. Cross-project promotion uses unique-project evidence and the same user gate.
+5. The model creates a compact Skill Evolution Proposal with the smallest useful placement layer.
+6. If the proposal is a `skill_patch`, the model recommends the concrete local Skill and path.
+7. The user chooses Project Rule / Skill Patch / Personal Global Skill / No / Revision.
+8. The accepted or rejected outcome is recorded.
+9. Accepted changes are applied or recorded with the smallest useful patch.
+10. Cross-project promotion uses unique-project evidence and the same user gate.

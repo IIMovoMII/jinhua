@@ -16,7 +16,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 - 汇总当前项目里的信号和聚类。
 - 把活跃本地信号导入全局晋升层。
 - 提示是否有待确认提案。
-- 为已经成熟的聚类打印提案骨架。
+- 为已经成熟的聚类打印提案骨架，包括建议落点（`placement_hint`）。如果建议落点是 `skill_patch`，还会尽量给出具体本地 Skill 和路径。
 
 `--json` 会输出机器可读结果。`--no-global` 只建议在测试或调试时使用。
 
@@ -80,15 +80,22 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> log-signal \
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
   --cluster-key <cluster-key> \
   --decision proposed_edit \
+  --placement <project_rule|skill_patch|personal_global_skill> \
   --target "<target Skill / file / insertion location>" \
   --patch "<1-3 sentence patch>" \
   --risk "<main side effect>"
 ```
 
+`--placement` 可以不传；不传时使用 `cycle` 骨架里的建议落点。
+
+- `project_rule`：当前项目规则。适合本项目反复需要、但还没有跨项目证据的经验。
+- `skill_patch`：增强已有本地 Skill。jinhua 会推荐最合适的具体 Skill 和路径；只有要覆盖推荐时，才需要手动传 `--recommended-skill` 或 `--recommended-skill-path`。
+- `personal_global_skill`：个人全局 Skill 或所有项目规则。
+
 用户确认后记录结果：
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal --proposal-id <id>
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal --proposal-id <id> --placement <chosen-placement>
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal --proposal-id <id> --reason "..."
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal --proposal-id <id> --reason "..." --revision
 ```
@@ -112,10 +119,13 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-cycle
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-propose \
   --method-fingerprint <fingerprint> \
   --decision proposed_edit \
+  --placement <skill_patch|personal_global_skill> \
   --target "<target Skill / file / insertion location>" \
   --patch "<1-3 sentence patch>" \
   --risk "<main side effect>"
 ```
+
+全局提案通常只在两个落点里选：有合适的已有本地 Skill，就用 `skill_patch`；没有清晰归属，才考虑 `personal_global_skill`。同项目内反复出现的经验，先走本地提案，不用等跨项目证据。
 
 只读查看可能重复的全局方法：
 

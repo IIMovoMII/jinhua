@@ -70,6 +70,14 @@ Required:
 - `status`
 - `user_gate`
 
+Expected on new proposals:
+
+- `placement`: `project_rule`, `skill_patch`, or `personal_global_skill`
+- `placement_reason`
+- `recommended_skill`
+- `recommended_skill_path`
+- `recommended_skill_reason`
+
 Proposal statuses: `pending_user_gate`, `applied`, `rejected`, `needs_revision`.
 
 ## adopted-edits.jsonl
@@ -83,6 +91,10 @@ Records accepted local proposals:
 - `target_skill`
 - `edit_summary`
 - `decision`
+- `placement`
+- `placement_reason`
+- `recommended_skill`
+- `recommended_skill_path`
 - `applied_path`
 
 ## rejected-proposals.jsonl
@@ -183,6 +195,14 @@ Required:
 - `strength_sum`
 - `status`
 - `user_gate`
+
+Expected on new global proposals:
+
+- `placement`: usually `skill_patch` or `personal_global_skill`
+- `placement_reason`
+- `recommended_skill`
+- `recommended_skill_path`
+- `recommended_skill_reason`
 
 ## project-index.json
 

@@ -8,7 +8,7 @@ The CLI is a deterministic ledger. It does not decide whether a method is intell
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 ```
 
-`cycle` initializes missing runtime files, summarizes local state, imports active local signals into global promotion state, surfaces pending gates, and prints proposal skeleton hints for ready clusters.
+`cycle` initializes missing runtime files, summarizes local state, imports active local signals into global promotion state, surfaces pending gates, and prints proposal skeleton hints for ready clusters. Ready skeletons include `placement_hint`; when the hint is `skill_patch`, they also include the concrete recommended local Skill and path when one can be matched.
 
 Use `--json` for machine-readable output. Use `--no-global` only for tests or debugging.
 
@@ -51,15 +51,18 @@ Only `source-type`, `summary`, `operator`, `cluster-key`, `context`, and `streng
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
   --cluster-key <cluster-key> \
   --decision proposed_edit \
+  --placement <project_rule|skill_patch|personal_global_skill> \
   --target "<target Skill / file / insertion location>" \
   --patch "<1-3 sentence patch>" \
   --risk "<main side effect>"
 ```
 
+If `--placement` is omitted, jinhua uses the skeleton's recommended placement. Use `project_rule` for current-project settling, `skill_patch` for an existing local Skill enhancement, and `personal_global_skill` for an all-project personal Skill. For `skill_patch`, jinhua recommends the most suitable local Skill; pass `--recommended-skill` or `--recommended-skill-path` only when overriding that recommendation.
+
 After the user gate:
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal --proposal-id <id>
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal --proposal-id <id> --placement <chosen-placement>
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal --proposal-id <id> --reason "..."
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal --proposal-id <id> --reason "..." --revision
 ```
@@ -81,10 +84,13 @@ Create a global proposal:
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-propose \
   --method-fingerprint <fingerprint> \
   --decision proposed_edit \
+  --placement <skill_patch|personal_global_skill> \
   --target "<target Skill / file / insertion location>" \
   --patch "<1-3 sentence patch>" \
   --risk "<main side effect>"
 ```
+
+Global proposals should normally use `skill_patch` when a matching local Skill exists, otherwise `personal_global_skill`. Cross-project evidence is for global promotion; same-project repetition should be handled by local proposals first.
 
 Inspect possible duplicate global methods without mutating data:
 
