@@ -1,0 +1,14 @@
+# Runtime state directories, not packaged into the Skill
+.jinhua/
+global-data/
+
+# Local Claude Code permission config, not packaged into the Skill
+.claude/
+
+# Build artifacts, not tracked
+skill.zip
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

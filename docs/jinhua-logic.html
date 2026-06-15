@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>jinhua 技能（jinhua skill）运行逻辑</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d2730;
+      --muted: #5d6875;
+      --line: #d6dde6;
+      --page: #f5f7fa;
+      --panel: #ffffff;
+      --teal: #0f766e;
+      --green: #2f7d32;
+      --amber: #b7791f;
+      --coral: #c2410c;
+      --indigo: #4f46e5;
+      --blue: #2563eb;
+      --shadow: 0 16px 40px rgba(29, 39, 48, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--page);
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .hero {
+      padding: 56px 0 26px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+      gap: 28px;
+      align-items: end;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      max-width: 780px;
+      font-size: clamp(40px, 6vw, 76px);
+      line-height: 0.96;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      font-size: 17px;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 740px;
+      margin-top: 20px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .hero-note {
+      border: 1px solid var(--line);
+      border-left: 6px solid var(--teal);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-note strong {
+      color: var(--teal);
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 26px;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      padding: 7px 12px;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .band {
+      margin: 34px 0;
+      padding: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .section-title {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .mark {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+      place-items: center;
+      border-radius: 8px;
+      background: #e6f5f3;
+      color: var(--teal);
+      font-weight: 800;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(142px, 1fr));
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .step,
+    .branch,
+    .metric,
+    .node,
+    .check {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .step {
+      position: relative;
+      min-height: 164px;
+      padding: 18px;
+      overflow: hidden;
+    }
+
+    .step::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      right: -12px;
+      width: 24px;
+      height: 2px;
+      background: var(--line);
+    }
+
+    .step:last-child::after {
+      display: none;
+    }
+
+    .step b {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--ink);
+      font-size: 16px;
+    }
+
+    .step p,
+    .branch p,
+    .metric p,
+    .node p,
+    .check p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .tag {
+      display: inline-block;
+      margin-bottom: 12px;
+      border-radius: 999px;
+      padding: 3px 9px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .t-teal { background: var(--teal); }
+    .t-green { background: var(--green); }
+    .t-amber { background: var(--amber); }
+    .t-coral { background: var(--coral); }
+    .t-indigo { background: var(--indigo); }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .branches {
+      display: grid;
+      gap: 14px;
+    }
+
+    .branch {
+      padding: 18px;
+      border-left: 5px solid var(--blue);
+    }
+
+    .branch.warn {
+      border-left-color: var(--amber);
+    }
+
+    .branch.good {
+      border-left-color: var(--green);
+    }
+
+    .tree {
+      display: grid;
+      gap: 14px;
+    }
+
+    .tree-root {
+      border: 2px solid var(--teal);
+      border-radius: 8px;
+      padding: 18px;
+      background: #f0fdfa;
+    }
+
+    .tree-lane {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .tree-line {
+      position: relative;
+      min-height: 100%;
+    }
+
+    .tree-line::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 13px;
+      width: 2px;
+      background: var(--line);
+    }
+
+    .node {
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .node:last-child {
+      margin-bottom: 0;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .metric {
+      min-height: 146px;
+      padding: 18px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .checks {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .check {
+      padding: 18px;
+    }
+
+    code,
+    pre {
+      font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    pre {
+      margin: 18px 0 0;
+      overflow-x: auto;
+      border: 1px solid #263241;
+      border-radius: 8px;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 18px;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .foot {
+      padding: 12px 0 44px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid,
+      .split {
+        grid-template-columns: 1fr;
+      }
+
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      .step::after {
+        top: auto;
+        right: 50%;
+        bottom: -12px;
+        width: 2px;
+        height: 24px;
+      }
+
+      .metrics,
+      .checks {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      main {
+        width: min(100% - 20px, 1180px);
+      }
+
+      .hero {
+        padding-top: 34px;
+      }
+
+      .band {
+        padding: 22px;
+      }
+
+      .metrics,
+      .checks {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-note {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero" aria-labelledby="page-title">
+      <div class="hero-grid">
+        <div>
+          <h1 id="page-title">jinhua 技能（jinhua skill）运行逻辑</h1>
+          <p class="lead">
+            jinhua 把真实任务里的可复用方法沉淀成可验证、可合并、可由用户确认的技能改进（Skill improvement）。它不做后台常驻，也不绕过用户确认；它在被触发时运行一次确定性闭环。
+          </p>
+          <div class="chips" aria-label="核心特征">
+            <span class="chip">触发时运行自动检查（cycle）</span>
+            <span class="chip">弱信号静默忽略</span>
+            <span class="chip">强证据才提案</span>
+            <span class="chip">同意 / 拒绝 / 修订（Yes / No / Revision）</span>
+            <span class="chip">跨项目只晋升压缩证据</span>
+          </div>
+        </div>
+        <aside class="hero-note">
+          <p><strong>一句话：</strong>jinhua 不是记忆库，也不是自动改代码的代理。它是一个“方法论信号蒸馏器”：先静默记录和聚类，证据足够强时才给用户一个小而明确的技能进化提案（Skill Evolution Proposal）。</p>
+        </aside>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="loop-title">
+      <div class="section-title">
+        <span class="mark">1</span>
+        <h2 id="loop-title">主闭环</h2>
+      </div>
+      <div class="flow" aria-label="jinhua 主闭环流程">
+        <article class="step">
+          <span class="tag t-teal">触发</span>
+          <b>任务出现方法信号</b>
+          <p>用户纠正、成功方法、重复失败、技能规则缺口（Skill rule gap），或用户要求让技能进化。</p>
+        </article>
+        <article class="step">
+          <span class="tag t-green">检查</span>
+          <b>运行自动检查（cycle）</b>
+          <p>初始化运行态，读取本地状态，导入全局层，列出待确认门控（pending gates）和已就绪聚类（ready clusters）。</p>
+        </article>
+        <article class="step">
+          <span class="tag t-amber">记录</span>
+          <b>记录信号（log-signal）</b>
+          <p>只记录可迁移的方法论摘要，包含触发条件（trigger）、方法动作（action）、迁移条件（transfer_conditions）和验证路径（verification_path）。</p>
+        </article>
+        <article class="step">
+          <span class="tag t-indigo">聚类</span>
+          <b>本地聚类（cluster）</b>
+          <p>按方法类型（operator）和方法短名（method slug）汇总同类信号，更新次数、强度、状态和证据样本。</p>
+        </article>
+        <article class="step">
+          <span class="tag t-coral">确认</span>
+          <b>用户门控</b>
+          <p>只有就绪（ready）后才提出提案（proposal）。用户选择同意、拒绝或修订（Yes / No / Revision），结果写回账本。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="decision-title">
+      <div class="section-title">
+        <span class="mark">2</span>
+        <h2 id="decision-title">什么时候安静，什么时候打扰用户</h2>
+      </div>
+      <div class="split">
+        <div class="branches">
+          <article class="branch good">
+            <h3>安静路径</h3>
+            <p>单次弱信号、普通偏好、一次性事实、泛泛提示词，不进入提案（proposal）。jinhua 只继续任务，最多静默记录。</p>
+          </article>
+          <article class="branch warn">
+            <h3>本地就绪条件（ready）</h3>
+            <p>同一聚类（cluster）至少 3 条活跃信号（active signals），或强度总和达到 5，或用户明确要求现在沉淀，或出现高成本且可复用的失败。</p>
+          </article>
+          <article class="branch">
+            <h3>提案路径</h3>
+            <p>已就绪聚类（ready cluster）先产出提案骨架（proposal skeleton），模型压缩成 1 到 3 句修改说明（patch）和主要风险（risk），再交给用户确认。</p>
+          </article>
+        </div>
+        <div class="branches">
+          <article class="branch">
+            <h3>同意（Yes）</h3>
+            <p>记录采纳，必要时把最小可用修改写入目标技能（Skill），然后再次运行自动检查（cycle）。</p>
+          </article>
+          <article class="branch warn">
+            <h3>拒绝（No）</h3>
+            <p>记录拒绝，聚类（cluster）进入冷却期（cooldown），避免同一弱证据反复打扰用户。</p>
+          </article>
+          <article class="branch good">
+            <h3>修订（Revision）</h3>
+            <p>把修订意见写入拒绝记录，重写提案（proposal），再让用户用同一个门控确认。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="data-title">
+      <div class="section-title">
+        <span class="mark">3</span>
+        <h2 id="data-title">数据树</h2>
+      </div>
+      <div class="tree" aria-label="运行态数据树">
+        <div class="tree-root">
+          <h3>jinhua 技能目录（Skill directory）</h3>
+          <p>保存技能指令（Skill instructions）、脚本、参考文档，以及跨项目晋升层。</p>
+        </div>
+        <div class="tree-lane">
+          <div class="tree-line" aria-hidden="true"></div>
+          <div>
+            <article class="node">
+              <h3>项目本地：<code>.jinhua/data/</code></h3>
+              <p>保存当前项目的原始信号（raw signals）、聚类状态（cluster-state）、提案记录（proposals）、已采纳修改（adopted edits）和已拒绝提案（rejected proposals）。原始证据留在项目内。</p>
+            </article>
+            <article class="node">
+              <h3>技能全局层（Skill global layer）：<code>&lt;jinhua-dir&gt;/global-data/</code></h3>
+              <p>只保存压缩后的方法证据和哈希化项目身份，用于判断一个方法是否跨项目重复出现。</p>
+            </article>
+            <article class="node">
+              <h3>稳定入口：<code>scripts/jinhua.py</code></h3>
+              <p>命令行接口（CLI）只做确定性账本工作：初始化、记录、聚类、导入、提案记录、确认结果、压缩和验证。</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="global-title">
+      <div class="section-title">
+        <span class="mark">4</span>
+        <h2 id="global-title">跨项目晋升</h2>
+      </div>
+      <div class="metrics">
+        <article class="metric">
+          <strong style="color: var(--teal);">指纹</strong>
+          <p>优先用方法类型（operator）+ 方法动作（action）形成方法指纹（method fingerprint），触发条件（trigger）和迁移条件（transfer_conditions）作为迁移证据。</p>
+        </article>
+        <article class="metric">
+          <strong style="color: var(--green);">项目</strong>
+          <p>默认需要 3 个不同项目的证据，避免把单项目偏好误当成通用方法。</p>
+        </article>
+        <article class="metric">
+          <strong style="color: var(--amber);">强度</strong>
+          <p>默认需要 5 条证据且强度总和达到 7；快速路径也至少需要 2 个项目和强证据。</p>
+        </article>
+        <article class="metric">
+          <strong style="color: var(--coral);">门控</strong>
+          <p>全局晋升也必须展示提案（proposal），并经过用户同意、拒绝或修订（Yes / No / Revision）。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="smart-title">
+      <div class="section-title">
+        <span class="mark">5</span>
+        <h2 id="smart-title">“更聪明”的具体含义</h2>
+      </div>
+      <div class="checks">
+        <article class="check">
+          <h3>更会识别</h3>
+          <p>只记录可复用的方法信号，不把普通任务噪音、一次性事实、个人偏好塞进账本。</p>
+        </article>
+        <article class="check">
+          <h3>更会压缩</h3>
+          <p>把不同说法归并为同一个“动作优先”的方法指纹（action-first method fingerprint），减少重复规则。</p>
+        </article>
+        <article class="check">
+          <h3>更少打扰</h3>
+          <p>未达到阈值时只继续任务。达到阈值后只展示紧凑提案（proposal），不展开长篇解释。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="commands-title">
+      <div class="section-title">
+        <span class="mark">6</span>
+        <h2 id="commands-title">检查命令</h2>
+      </div>
+      <p>下面这些命令必须保持英文，因为它们是可执行接口；中文页面负责解释它们的含义。</p>
+      <pre><code>python &lt;jinhua-dir&gt;/scripts/jinhua.py --project-root &lt;project-root&gt; cycle
+python &lt;jinhua-dir&gt;/scripts/jinhua.py --project-root &lt;project-root&gt; status
+python &lt;jinhua-dir&gt;/scripts/jinhua.py --project-root &lt;project-root&gt; global-status
+python &lt;jinhua-dir&gt;/scripts/jinhua.py --project-root &lt;project-root&gt; validate</code></pre>
+    </section>
+
+    <p class="foot">
+      运行原则：脚本保证账本确定性，模型负责迁移判断，用户负责最终风险确认。
+    </p>
+  </main>
+</body>
+</html>
