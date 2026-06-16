@@ -1,6 +1,6 @@
 ---
 name: jinhua
-description: Methodology Skill for reusable workflow signals in Agent Skills-compatible coding agents. Use when work reveals a repeatable method, transferable failure, or an explicit request to crystallize/update a Skill; skip one-off bugs and preferences.
+description: Methodology Skill for reusable workflow signals in Agent Skills-compatible coding agents. Use when work reveals a repeatable method, user correction, transferable failure, or an explicit request to remember, crystallize, update a Skill, apply everywhere, or improve Skill evolution; skip one-off bugs and preferences.
 ---
 
 # jinhua
