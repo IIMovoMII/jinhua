@@ -77,6 +77,11 @@ Expected on new proposals:
 - `recommended_skill`
 - `recommended_skill_path`
 - `recommended_skill_reason`
+- `agent_profile`: only for `project_rule`
+- `recommended_project_rule_file`: only for `project_rule`
+- `recommended_project_rule_path`: only for `project_rule`
+- `recommended_project_rule_reason`: only for `project_rule`
+- `project_rule_candidates`: only for `project_rule`
 
 Proposal statuses: `pending_user_gate`, `applied`, `rejected`, `needs_revision`.
 
@@ -95,6 +100,10 @@ Records accepted local proposals:
 - `placement_reason`
 - `recommended_skill`
 - `recommended_skill_path`
+- `agent_profile`
+- `recommended_project_rule_file`
+- `recommended_project_rule_path`
+- `recommended_project_rule_reason`
 - `applied_path`
 
 ## rejected-proposals.jsonl

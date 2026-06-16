@@ -31,6 +31,48 @@ cycle
 
 `cycle` is the automatic checkpoint. It initializes missing runtime state, scans local clusters, imports local signals into the global promotion layer, surfaces pending gates, and prints proposal skeleton hints for ready clusters.
 
+## Rules
+
+jinhua records only reusable methodology signals. A signal should have a future `trigger` plus `action`.
+
+Record when at least one is true:
+
+- User correction changes the model's reasoning, verification standard, or workflow.
+- The same method repeats in the current project.
+- A fixed failure exposes a transferable cause.
+- A success path exposes a reusable method.
+- The user explicitly asks to remember, crystallize, write into a Skill, or apply everywhere.
+
+Skip one-off preferences, ordinary bugs, local paths, temporary commands, local API details, and lessons useful only in the current chat.
+
+Strength is simple:
+
+- `1`: ordinary observation.
+- `2`: clear user correction or repeated pattern.
+- `3`: high-cost failure, repeated rework, or explicit crystallization request.
+
+Local readiness:
+
+- `signal_count >= 3`, or
+- `strength_sum >= 5`, or
+- explicit immediate user request, or
+- reusable urgent high-cost failure.
+
+Global readiness:
+
+- Same normalized `method_fingerprint`.
+- Default: 3 projects, 5 evidence records, strength 7.
+- Fast path: 2 projects, strength 6, with strong correction or high-strength evidence.
+
+Placement is decided in this order:
+
+1. `personal_global_skill`: all-project request, new standalone Skill, independent workflow, or global evidence.
+2. `skill_patch`: belongs in an existing local Skill; jinhua recommends the concrete Skill and path.
+3. `project_rule`: current-project need that is not clearly global or an existing Skill patch.
+4. Otherwise: do not write.
+
+For `project_rule`, jinhua recommends a target file with `recommended_project_rule_file`. It prefers existing project files and supports `--agent-profile` / `JINHUA_AGENT_PROFILE` for `codex`, `claude`, `copilot`, `trae`, `hermes`, `openclaw`, `workbuddy`, and generic/custom fallback. It does not auto-create project rule files.
+
 ## Quick Start
 
 ```bash

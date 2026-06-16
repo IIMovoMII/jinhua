@@ -131,6 +131,30 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> log-
 
 记录后再运行 `cycle`。
 
+## 写入或跳过的前置判断
+
+不要把每个任务细节都硬塞进提案。多数普通任务信息应该跳过。
+
+只有经验能写成可复用的 `trigger` + `action`，并且满足下面至少一条，才记录：
+
+- 用户纠正了推理方向、验证标准或工作流程。
+- 同一个方法在当前项目里反复出现。
+- 明确失败已经修好，而且失败原因可迁移。
+- 成功路径暴露出可复用的方法。
+- 用户明确要求记住、沉淀、写进 Skill，或所有项目都这样做。
+
+一次性偏好、普通代码 bug、本地路径、临时命令、本地 API 细节、只对当前对话有用的经验，都跳过。
+
+## 失败轨迹候选
+
+出现明确失败证据后，只在同时满足以下条件时，才考虑静默记录 `failure_trace`：
+
+1. 任务已经修好，或失败原因已经明确。
+2. 这条经验能写成未来的 `trigger` + `action`。
+3. 它不是一次性拼写错误、漏 import，或只属于本地 API 的细节。
+
+满足就静默记录信号并运行 `cycle`；不满足就什么都不记。先修用户任务，不要为了分析失败打断当前任务。
+
 ## 本地提案确认
 
 同一个项目里的重复，说明“当前项目现在需要”。这时应该先给出本地沉淀建议，不要等跨项目证据。跨项目证据只用于全局晋升。
@@ -154,11 +178,15 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> prop
   --risk "<main side effect>"
 ```
 
-三个落点：
+落点判断顺序：
 
-- `project_rule`：轻量项目规则。适合“这个项目反复需要”，但还没有跨项目证据的经验。
-- `skill_patch`：增强已有本地 Skill。agent 必须推荐最合适的具体 Skill 和路径，不能让用户自己去找。
-- `personal_global_skill`：个人全局 Skill 或所有项目规则。适合用户明确要求全局生效，或全局晋升证据已经足够。
+1. `personal_global_skill`：只在用户明确要求所有项目生效、要求新建独立 Skill、这条方法是没有现有 Skill 归属的独立工作流，或全局证据已经足够时使用。
+2. `skill_patch`：这条经验属于已有本地 Skill 时使用。agent 必须推荐最合适的具体 Skill 和路径，不能让用户自己去找。
+3. `project_rule`：本地兜底。当前项目反复需要，但还不适合改已有 Skill，也不适合做成个人全局 Skill 时使用。
+
+不要把当前项目约定、局部修复习惯、目录结构、框架细节、一次性工具偏好判成 `personal_global_skill`。正常分布应该是：大多数不写入，`project_rule` 较常见，`skill_patch` 较少，`personal_global_skill` 最少。
+
+如果落点是 `project_rule`，使用 CLI 骨架里的 `recommended_project_rule_file` 和 `recommended_project_rule_reason`。它会优先推荐项目里已经存在的规则文件，并支持用 `--agent-profile` 或 `JINHUA_AGENT_PROFILE` 指定 `codex`、`claude`、`copilot`、`trae`、`hermes`、`openclaw`、`workbuddy`，也有 generic/custom 兜底。没有用户确认时，不要自动创建项目规则文件。
 
 给用户展示时，用用户当前语言说明，但保留规范字段：
 
@@ -185,6 +213,12 @@ Recommended local Skill:
 
 Recommended Skill path:
 [本地 SKILL.md 路径；如果是 skill_patch，这项必填]
+
+Recommended project rule file:
+[项目规则文件；如果是 project_rule，这项必填]
+
+Project rule reason:
+[为什么推荐这个文件]
 
 Target:
 [目标 Skill / 文件 / 插入位置]

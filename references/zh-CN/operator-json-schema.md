@@ -91,6 +91,11 @@
 - `recommended_skill`：推荐增强的本地 Skill 名称。
 - `recommended_skill_path`：推荐增强的本地 `SKILL.md` 路径。
 - `recommended_skill_reason`：为什么推荐这个 Skill。
+- `agent_profile`：只在 `project_rule` 时使用，表示当前按哪个 agent 档案推荐规则文件。
+- `recommended_project_rule_file`：只在 `project_rule` 时使用，推荐的项目规则文件。
+- `recommended_project_rule_path`：只在 `project_rule` 时使用，推荐文件的绝对路径。
+- `recommended_project_rule_reason`：只在 `project_rule` 时使用，说明为什么推荐这个文件。
+- `project_rule_candidates`：只在 `project_rule` 时使用，候选规则文件列表。
 
 提案状态包括：
 
@@ -114,6 +119,10 @@
 - `placement_reason`
 - `recommended_skill`
 - `recommended_skill_path`
+- `agent_profile`
+- `recommended_project_rule_file`
+- `recommended_project_rule_path`
+- `recommended_project_rule_reason`
 - `applied_path`
 
 ## rejected-proposals.jsonl

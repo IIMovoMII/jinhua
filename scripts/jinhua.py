@@ -121,6 +121,36 @@ GLOBAL_FAST_PROJECT_THRESHOLD = 2
 GLOBAL_FAST_STRENGTH_THRESHOLD = 6
 DEFAULT_RUNTIME_DIR_NAME = ".jinhua"
 
+GENERIC_PROJECT_RULE_FILES = [
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".github/copilot-instructions.md",
+    "copilot-instructions.md",
+    "README.md",
+    "docs/AI.md",
+    "docs/AGENTS.md",
+]
+
+AGENT_PROFILE_RULE_FILES = {
+    "codex": ["AGENTS.md"],
+    "claude": ["CLAUDE.md"],
+    "copilot": [".github/copilot-instructions.md", "copilot-instructions.md"],
+    "trae": ["AGENTS.md", ".trae/rules.md", "README.md"],
+    "hermes": ["AGENTS.md", "HERMES.md", "README.md"],
+    "openclaw": ["AGENTS.md", "OPENCLAW.md", "README.md"],
+    "workbuddy": ["AGENTS.md", "WORKBUDDY.md", "README.md"],
+    "generic": GENERIC_PROJECT_RULE_FILES,
+    "custom": GENERIC_PROJECT_RULE_FILES,
+    "unknown": GENERIC_PROJECT_RULE_FILES,
+}
+
+AGENT_PROFILE_ALIASES = {
+    "claude-code": "claude",
+    "claudecode": "claude",
+    "github-copilot": "copilot",
+    "githubcopilot": "copilot",
+}
+
 SIGNAL_CARD_FIELDS = [
     "trigger",
     "action",
@@ -169,6 +199,19 @@ def codex_home() -> Path:
 
 def project_root(args: argparse.Namespace) -> Path:
     return Path(getattr(args, "project_root", ".")).resolve()
+
+
+def normalize_agent_profile(value: str) -> str:
+    profile = re.sub(r"[^a-z0-9_-]+", "-", str(value or "").strip().lower()).strip("-_")
+    if not profile:
+        return "generic"
+    return AGENT_PROFILE_ALIASES.get(profile, profile)
+
+
+def agent_profile(args: argparse.Namespace | None) -> str:
+    explicit = getattr(args, "agent_profile", "") if args is not None else ""
+    profile = explicit or os.environ.get("JINHUA_AGENT_PROFILE", "")
+    return normalize_agent_profile(profile)
 
 
 def project_identity_material(args: argparse.Namespace) -> tuple[str, str]:
@@ -709,6 +752,45 @@ def recommend_local_skill(args: argparse.Namespace | None, cluster: dict, record
     return best
 
 
+def unique_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        normalized = item.replace("\\", "/").strip("/")
+        key = normalized.lower()
+        if not normalized or key in seen:
+            continue
+        seen.add(key)
+        result.append(normalized)
+    return result
+
+
+def project_rule_candidates_for_profile(profile: str) -> list[str]:
+    candidates = AGENT_PROFILE_RULE_FILES.get(profile, []) + GENERIC_PROJECT_RULE_FILES
+    return unique_preserve_order(candidates)
+
+
+def recommend_project_rule_file(args: argparse.Namespace | None) -> dict:
+    if args is None:
+        return {}
+    root = project_root(args)
+    profile = agent_profile(args)
+    candidates = project_rule_candidates_for_profile(profile)
+    existing = [item for item in candidates if (root / item).is_file()]
+    recommended = existing[0] if existing else (candidates[0] if candidates else "AGENTS.md")
+    reason = "existing project rule file" if existing else "first candidate for this agent profile; do not create without user confirmation"
+    if profile not in AGENT_PROFILE_RULE_FILES:
+        reason = f"unknown agent profile; {reason}"
+    return {
+        "agent_profile": profile,
+        "recommended_project_rule_file": recommended,
+        "recommended_project_rule_path": str((root / recommended).resolve()),
+        "recommended_project_rule_reason": reason,
+        "project_rule_candidates": candidates,
+        "project_rule_existing_files": existing,
+    }
+
+
 def placement_text(cluster: dict, records: list[dict]) -> str:
     return " ".join(proposal_positive_parts(cluster, records)).lower()
 
@@ -747,13 +829,15 @@ def looks_like_personal_global_skill(text: str) -> bool:
     return any(phrase in text for phrase in phrases)
 
 
-def placement_target_hint(placement: str, recommendation: dict) -> str:
+def placement_target_hint(placement: str, recommendation: dict, project_rule: dict | None = None) -> str:
     if placement == "skill_patch":
         if recommendation:
             return f"{recommendation.get('name', '')}/SKILL.md ({recommendation.get('path', '')})"
         return "[specific existing local Skill / SKILL.md or references/*.md]"
     if placement == "personal_global_skill":
         return "[~/.codex/skills/<new-skill-name>/SKILL.md]"
+    if project_rule and project_rule.get("recommended_project_rule_file"):
+        return project_rule.get("recommended_project_rule_file", "")
     return "[project rule location, project docs, or recorded local rule]"
 
 
@@ -771,6 +855,7 @@ def normalize_placement(value: str, default: str = "") -> str:
 def infer_local_placement(args: argparse.Namespace | None, cluster: dict, records: list[dict]) -> dict:
     recommendation = recommend_local_skill(args, cluster, records)
     text = placement_text(cluster, records)
+    project_rule = recommend_project_rule_file(args)
     if looks_like_personal_global_skill(text):
         placement = "personal_global_skill"
         reason = "the signal explicitly asks for all-project or standalone Skill use"
@@ -784,12 +869,19 @@ def infer_local_placement(args: argparse.Namespace | None, cluster: dict, record
         placement = "project_rule"
         reason = "same-project repetition shows current project need, without enough cross-project evidence"
     owner = recommendation if placement == "skill_patch" else {}
+    project_rule_fields = project_rule if placement == "project_rule" else {}
     return {
         "placement_hint": placement,
         "placement_reason": reason,
         "recommended_skill": owner.get("name", ""),
         "recommended_skill_path": owner.get("path", ""),
         "recommended_skill_reason": owner.get("reason", ""),
+        "agent_profile": project_rule_fields.get("agent_profile", ""),
+        "recommended_project_rule_file": project_rule_fields.get("recommended_project_rule_file", ""),
+        "recommended_project_rule_path": project_rule_fields.get("recommended_project_rule_path", ""),
+        "recommended_project_rule_reason": project_rule_fields.get("recommended_project_rule_reason", ""),
+        "project_rule_candidates": project_rule_fields.get("project_rule_candidates", []),
+        "project_rule_existing_files": project_rule_fields.get("project_rule_existing_files", []),
         "skill_candidates": [
             {
                 "name": item.get("name", ""),
@@ -798,7 +890,7 @@ def infer_local_placement(args: argparse.Namespace | None, cluster: dict, record
             }
             for item in ([owner] + owner.get("alternatives", []) if owner else [])
         ],
-        "target_hint": placement_target_hint(placement, owner),
+        "target_hint": placement_target_hint(placement, owner, project_rule_fields),
     }
 
 
@@ -900,6 +992,12 @@ def local_proposal_skeleton(cluster: dict, signals: list[dict], args: argparse.N
         "recommended_skill": placement["recommended_skill"],
         "recommended_skill_path": placement["recommended_skill_path"],
         "recommended_skill_reason": placement["recommended_skill_reason"],
+        "agent_profile": placement["agent_profile"],
+        "recommended_project_rule_file": placement["recommended_project_rule_file"],
+        "recommended_project_rule_path": placement["recommended_project_rule_path"],
+        "recommended_project_rule_reason": placement["recommended_project_rule_reason"],
+        "project_rule_candidates": placement["project_rule_candidates"],
+        "project_rule_existing_files": placement["project_rule_existing_files"],
         "skill_candidates": placement["skill_candidates"],
         "patch_hint": compact_text(patch_hint, limit=260),
         "risk_hint": compact_text(risk, limit=180),
@@ -1757,6 +1855,11 @@ def command_propose(args: argparse.Namespace) -> None:
         "recommended_skill": recommended_skill,
         "recommended_skill_path": recommended_skill_path,
         "recommended_skill_reason": skeleton.get("recommended_skill_reason", ""),
+        "agent_profile": skeleton.get("agent_profile", ""),
+        "recommended_project_rule_file": skeleton.get("recommended_project_rule_file", ""),
+        "recommended_project_rule_path": skeleton.get("recommended_project_rule_path", ""),
+        "recommended_project_rule_reason": skeleton.get("recommended_project_rule_reason", ""),
+        "project_rule_candidates": skeleton.get("project_rule_candidates", []),
         "target": target,
         "patch": args.patch or "[1-3 sentence patch or structured operator definition]",
         "risk": args.risk or "[main risk or side effect]",
@@ -1795,6 +1898,12 @@ Recommended local Skill:
 
 Recommended Skill path:
 {proposal['recommended_skill_path'] or '[none]'}
+
+Recommended project rule file:
+{proposal['recommended_project_rule_file'] or '[none]'}
+
+Project rule reason:
+{proposal['recommended_project_rule_reason'] or '[none]'}
 
 Target:
 {proposal['target']}
@@ -1881,6 +1990,10 @@ def command_apply_proposal(args: argparse.Namespace) -> None:
         "placement_reason": proposal.get("placement_reason", ""),
         "recommended_skill": proposal.get("recommended_skill", ""),
         "recommended_skill_path": proposal.get("recommended_skill_path", ""),
+        "agent_profile": proposal.get("agent_profile", ""),
+        "recommended_project_rule_file": proposal.get("recommended_project_rule_file", ""),
+        "recommended_project_rule_path": proposal.get("recommended_project_rule_path", ""),
+        "recommended_project_rule_reason": proposal.get("recommended_project_rule_reason", ""),
         "applied_path": applied_path,
     }
     append_jsonl(data_dir(args) / "adopted-edits.jsonl", adopt_record)
@@ -2021,6 +2134,7 @@ def collect_runtime_summary(args: argparse.Namespace) -> dict:
                 "decision": proposal.get("decision", ""),
                 "placement": proposal.get("placement", ""),
                 "recommended_skill": proposal.get("recommended_skill", ""),
+                "recommended_project_rule_file": proposal.get("recommended_project_rule_file", ""),
                 "status": proposal.get("status", ""),
                 "target": proposal.get("target", ""),
             })
@@ -2119,6 +2233,10 @@ def command_cycle(args: argparse.Namespace) -> None:
                 if skeleton.get("recommended_skill"):
                     print(f"  recommended_skill: {skeleton.get('recommended_skill', '')}")
                     print(f"  recommended_skill_path: {skeleton.get('recommended_skill_path', '')}")
+                if skeleton.get("recommended_project_rule_file"):
+                    print(f"  agent_profile: {skeleton.get('agent_profile', '')}")
+                    print(f"  recommended_project_rule_file: {skeleton.get('recommended_project_rule_file', '')}")
+                    print(f"  recommended_project_rule_reason: {skeleton.get('recommended_project_rule_reason', '')}")
                 print(f"  target_hint: {skeleton.get('target_hint', '')}")
                 print(f"  patch_hint: {skeleton.get('patch_hint', '')}")
                 print(f"  risk_hint: {skeleton.get('risk_hint', '')}")
@@ -2464,6 +2582,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--global-runtime-dir",
         default="",
         help="Override global promotion directory. Defaults to the Skill's global-data directory.",
+    )
+    parser.add_argument(
+        "--agent-profile",
+        default="",
+        help="Project-rule target profile: codex, claude, copilot, trae, hermes, openclaw, workbuddy, or generic.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

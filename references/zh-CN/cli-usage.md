@@ -16,9 +16,11 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 - 汇总当前项目里的信号和聚类。
 - 把活跃本地信号导入全局晋升层。
 - 提示是否有待确认提案。
-- 为已经成熟的聚类打印提案骨架，包括建议落点（`placement_hint`）。如果建议落点是 `skill_patch`，还会尽量给出具体本地 Skill 和路径。
+- 为已经成熟的聚类打印提案骨架，包括建议落点（`placement_hint`）。如果建议落点是 `skill_patch`，还会尽量给出具体本地 Skill 和路径；如果建议落点是 `project_rule`，会给出 `recommended_project_rule_file`。
 
 `--json` 会输出机器可读结果。`--no-global` 只建议在测试或调试时使用。
+
+`--agent-profile` 或环境变量 `JINHUA_AGENT_PROFILE` 可以影响项目规则文件推荐。支持 `codex`、`claude`、`copilot`、`trae`、`hermes`、`openclaw`、`workbuddy`，未知 agent 会走 generic/custom 兜底。
 
 ## 项目身份
 
@@ -91,6 +93,8 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
 - `project_rule`：当前项目规则。适合本项目反复需要、但还没有跨项目证据的经验。
 - `skill_patch`：增强已有本地 Skill。jinhua 会推荐最合适的具体 Skill 和路径；只有要覆盖推荐时，才需要手动传 `--recommended-skill` 或 `--recommended-skill-path`。
 - `personal_global_skill`：个人全局 Skill 或所有项目规则。
+
+如果是 `project_rule`，jinhua 会推荐项目规则文件，但不会自动创建。推荐顺序会优先考虑当前项目里已经存在的规则文件。
 
 用户确认后记录结果：
 

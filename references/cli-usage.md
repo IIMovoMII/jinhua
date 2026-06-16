@@ -8,9 +8,11 @@ The CLI is a deterministic ledger. It does not decide whether a method is intell
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 ```
 
-`cycle` initializes missing runtime files, summarizes local state, imports active local signals into global promotion state, surfaces pending gates, and prints proposal skeleton hints for ready clusters. Ready skeletons include `placement_hint`; when the hint is `skill_patch`, they also include the concrete recommended local Skill and path when one can be matched.
+`cycle` initializes missing runtime files, summarizes local state, imports active local signals into global promotion state, surfaces pending gates, and prints proposal skeleton hints for ready clusters. Ready skeletons include `placement_hint`; when the hint is `skill_patch`, they include the concrete recommended local Skill and path when one can be matched. When the hint is `project_rule`, they include `recommended_project_rule_file`.
 
 Use `--json` for machine-readable output. Use `--no-global` only for tests or debugging.
+
+Use `--agent-profile` or `JINHUA_AGENT_PROFILE` to tune project-rule file recommendations. Supported profiles are `codex`, `claude`, `copilot`, `trae`, `hermes`, `openclaw`, `workbuddy`, and generic/custom fallback.
 
 ## Project Identity
 
@@ -57,7 +59,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
   --risk "<main side effect>"
 ```
 
-If `--placement` is omitted, jinhua uses the skeleton's recommended placement. Use `project_rule` for current-project settling, `skill_patch` for an existing local Skill enhancement, and `personal_global_skill` for an all-project personal Skill. For `skill_patch`, jinhua recommends the most suitable local Skill; pass `--recommended-skill` or `--recommended-skill-path` only when overriding that recommendation.
+If `--placement` is omitted, jinhua uses the skeleton's recommended placement. Use `project_rule` for current-project settling, `skill_patch` for an existing local Skill enhancement, and `personal_global_skill` for an all-project personal Skill. For `skill_patch`, jinhua recommends the most suitable local Skill; pass `--recommended-skill` or `--recommended-skill-path` only when overriding that recommendation. For `project_rule`, jinhua recommends a target project rule file but does not create it automatically.
 
 After the user gate:
 

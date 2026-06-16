@@ -134,6 +134,30 @@ Optional signal-card fields make cross-project merging more accurate:
 
 After `log-signal`, run `cycle`.
 
+## Write-or-Skip Gate
+
+Do not force every lesson into a proposal. Most task details should be skipped.
+
+Log only if the lesson can become a reusable `trigger` plus `action` and at least one is true:
+
+- The user corrected reasoning direction, verification standard, or workflow.
+- The same method appears repeatedly in the current project.
+- A clear failure was fixed and the cause is transferable.
+- A success path reveals a reusable method.
+- The user explicitly asks to remember, crystallize, write into a Skill, or apply everywhere.
+
+Skip one-off preferences, ordinary code bugs, local paths, temporary commands, local API details, and lessons useful only in the current chat.
+
+## Failure Trace Candidate
+
+After clear failure evidence, consider a quiet `failure_trace` signal only if all are true:
+
+1. The task was fixed or the failure cause is known.
+2. The lesson can be phrased as a future `trigger` plus `action`.
+3. The lesson is not a one-off typo, missing import, or local API detail.
+
+If yes, log a quiet signal and run `cycle`. If not, do nothing. Fix the user's task first; never interrupt the task just to analyze a failure.
+
 ## Local Proposal Gate
 
 Local repetition means current need. If the same project repeatedly produces the same reusable method, propose a local settling point; do not wait for cross-project evidence. Cross-project evidence is required only for global promotion.
@@ -159,9 +183,13 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> prop
 
 Placement ladder:
 
-- `project_rule`: lightweight rule for the current project or workspace. Use when repetition shows local need but there is not enough cross-project transfer evidence.
-- `skill_patch`: targeted enhancement to an existing local Skill. The agent must recommend the most suitable concrete local Skill and path; do not ask the user to find it.
-- `personal_global_skill`: heavier personal global Skill or all-project rule. Use when the user explicitly asks for all-project behavior, or when global promotion evidence supports it.
+1. `personal_global_skill`: use only when the user asks for all-project behavior, asks for a new standalone Skill, the method is an independent workflow with no existing Skill owner, or global evidence supports it.
+2. `skill_patch`: use when the method belongs in an existing local Skill. The agent must recommend the most suitable concrete local Skill and path; do not ask the user to find it.
+3. `project_rule`: use as the local fallback when current-project repetition shows need but the method is not clearly an existing Skill patch or personal global Skill.
+
+Do not choose `personal_global_skill` for current-project conventions, local repair habits, directory structure, framework details, or one-off tool preferences. Normal distribution should be: skip most, `project_rule` often, `skill_patch` less often, `personal_global_skill` least often.
+
+For `project_rule`, use the CLI skeleton's `recommended_project_rule_file` and `recommended_project_rule_reason`. It prefers existing project files and supports `--agent-profile` / `JINHUA_AGENT_PROFILE` for `codex`, `claude`, `copilot`, `trae`, `hermes`, `openclaw`, `workbuddy`, and generic/custom fallback. Never auto-create a project rule file without user confirmation.
 
 Show the user this structure, rendered in the user's current conversation language:
 
@@ -188,6 +216,12 @@ Recommended local Skill:
 
 Recommended Skill path:
 [local SKILL.md path, required when placement is skill_patch]
+
+Recommended project rule file:
+[project rule file, required when placement is project_rule]
+
+Project rule reason:
+[why this file was recommended]
 
 Target:
 [target Skill / file / insertion location]
