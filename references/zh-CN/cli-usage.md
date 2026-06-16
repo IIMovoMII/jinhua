@@ -84,7 +84,9 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
   --decision proposed_edit \
   --placement <project_rule|skill_patch|personal_global_skill> \
   --target "<target Skill / file / insertion location>" \
-  --patch "<1-3 sentence patch>" \
+  --patch "## <简短规则标题>
+
+<完整 Markdown 规则块。>" \
   --risk "<main side effect>"
 ```
 
@@ -125,7 +127,9 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-propo
   --decision proposed_edit \
   --placement <skill_patch|personal_global_skill> \
   --target "<target Skill / file / insertion location>" \
-  --patch "<1-3 sentence patch>" \
+  --patch "## <简短规则标题>
+
+<完整 Markdown 规则块。>" \
   --risk "<main side effect>"
 ```
 

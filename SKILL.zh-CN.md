@@ -189,7 +189,9 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> prop
   --decision proposed_edit \
   --placement <project_rule|skill_patch|personal_global_skill> \
   --target "<target Skill / file / insertion location>" \
-  --patch "<1-3 sentence patch>" \
+  --patch "## <简短规则标题>
+
+<完整 Markdown 规则块。>" \
   --risk "<main side effect>"
 ```
 
@@ -239,7 +241,7 @@ Target:
 [目标 Skill / 文件 / 插入位置]
 
 Patch:
-[1 到 3 句话说明要怎么改]
+[完整 Markdown 规则块，不要只写散句]
 
 Risk:
 [主要副作用]

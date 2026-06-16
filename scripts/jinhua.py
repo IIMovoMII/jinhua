@@ -201,6 +201,52 @@ def project_root(args: argparse.Namespace) -> Path:
     return Path(getattr(args, "project_root", ".")).resolve()
 
 
+def path_is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def apply_text_patch(target: Path, patch: str, insert_after: str = "") -> str:
+    text = target.read_text(encoding="utf-8")
+    block = patch.strip()
+    if block in text:
+        return "already_present"
+
+    if insert_after:
+        marker = insert_after.strip()
+        index = text.find(marker)
+        if index == -1:
+            raise SystemExit(f"Insert marker not found: {marker!r}")
+        insert_at = index + len(marker)
+        text = text[:insert_at].rstrip() + "\n\n" + block + "\n\n" + text[insert_at:].lstrip()
+    else:
+        text = text.rstrip() + "\n\n" + block + "\n"
+
+    with target.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
+    return "written"
+
+
+def validate_skill_write_target(args: argparse.Namespace, target: Path) -> None:
+    allowed_roots = [
+        project_root(args),
+        codex_home() / "skills",
+        skill_root(),
+    ]
+    if not any(path_is_relative_to(target, root.resolve()) for root in allowed_roots):
+        raise SystemExit("Target must be under project root, CODEX_HOME/skills, or this Skill root.")
+
+    lower_parts = {part.lower() for part in target.parts}
+    if target.name == "SKILL.md":
+        return
+    if "references" in lower_parts and target.suffix.lower() == ".md":
+        return
+    raise SystemExit("apply may only write SKILL.md or references/*.md")
+
+
 def normalize_agent_profile(value: str) -> str:
     profile = re.sub(r"[^a-z0-9_-]+", "-", str(value or "").strip().lower()).strip("-_")
     if not profile:
@@ -1621,19 +1667,16 @@ def command_global_apply(args: argparse.Namespace) -> None:
         proposal["placement_reason"] = args.placement_reason
 
     applied_path = ""
+    write_status = ""
     if args.target_skill_path:
         target = Path(args.target_skill_path).resolve()
         if not target.exists():
             raise SystemExit(f"Target file not found: {target}")
-        if target.name != "SKILL.md" and "references" not in {part.lower() for part in target.parts}:
-            raise SystemExit("global-apply may only write SKILL.md or references/*.md")
+        validate_skill_write_target(args, target)
         patch = args.patch or proposal.get("patch", "")
         if not patch or patch.startswith("["):
             raise SystemExit("No concrete patch content supplied. Provide --patch.")
-        with target.open("a", encoding="utf-8", newline="\n") as handle:
-            handle.write("\n\n")
-            handle.write(patch.strip())
-            handle.write("\n")
+        write_status = apply_text_patch(target, patch, args.insert_after)
         applied_path = str(target)
 
     proposal["status"] = "applied"
@@ -1661,6 +1704,7 @@ def command_global_apply(args: argparse.Namespace) -> None:
         "recommended_skill": proposal.get("recommended_skill", ""),
         "recommended_skill_path": proposal.get("recommended_skill_path", ""),
         "applied_path": applied_path,
+        "write_status": write_status,
     }
     append_jsonl(adopted_global_path(args), adopt_record)
     print(json.dumps({"applied": True, "id": adopt_record["id"], "applied_path": applied_path}, ensure_ascii=False))
@@ -1952,19 +1996,16 @@ def command_apply_proposal(args: argparse.Namespace) -> None:
         proposal["placement_reason"] = args.placement_reason
 
     applied_path = ""
+    write_status = ""
     if args.target_skill_path:
         target = Path(args.target_skill_path).resolve()
         if not target.exists():
             raise SystemExit(f"Target file not found: {target}")
-        if target.name != "SKILL.md" and "references" not in {part.lower() for part in target.parts}:
-            raise SystemExit("apply-proposal may only write SKILL.md or references/*.md")
+        validate_skill_write_target(args, target)
         patch = args.patch or proposal.get("patch", "")
         if not patch or patch.startswith("["):
             raise SystemExit("No concrete patch content supplied. Provide --patch.")
-        with target.open("a", encoding="utf-8", newline="\n") as handle:
-            handle.write("\n\n")
-            handle.write(patch.strip())
-            handle.write("\n")
+        write_status = apply_text_patch(target, patch, args.insert_after)
         applied_path = str(target)
 
     proposal["status"] = "applied"
@@ -1995,6 +2036,7 @@ def command_apply_proposal(args: argparse.Namespace) -> None:
         "recommended_project_rule_path": proposal.get("recommended_project_rule_path", ""),
         "recommended_project_rule_reason": proposal.get("recommended_project_rule_reason", ""),
         "applied_path": applied_path,
+        "write_status": write_status,
     }
     append_jsonl(data_dir(args) / "adopted-edits.jsonl", adopt_record)
 
@@ -2646,6 +2688,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_parser.add_argument("--placement-reason", default="")
     apply_parser.add_argument("--target-skill-path", default="")
     apply_parser.add_argument("--patch", default="")
+    apply_parser.add_argument("--insert-after", default="", help="Insert patch after this exact marker instead of appending")
     apply_parser.add_argument("--force", action="store_true")
     apply_parser.set_defaults(func=command_apply_proposal)
 
@@ -2691,6 +2734,7 @@ def build_parser() -> argparse.ArgumentParser:
     global_apply_parser.add_argument("--placement-reason", default="")
     global_apply_parser.add_argument("--target-skill-path", default="")
     global_apply_parser.add_argument("--patch", default="")
+    global_apply_parser.add_argument("--insert-after", default="", help="Insert patch after this exact marker instead of appending")
     global_apply_parser.add_argument("--force", action="store_true")
     global_apply_parser.set_defaults(func=command_global_apply)
 

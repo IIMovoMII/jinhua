@@ -1,6 +1,6 @@
 ---
 name: jinhua
-description: Methodology Skill evolution assistant for Agent Skills-compatible coding agents, including Claude Code and Codex. Use when work reveals reusable prompting/workflow methods: user corrections to reasoning or verification, repeated same-project methods, fixed failures with transferable causes, reusable success traces, missing or costly Skill rules, or phrases like remember this, always do this, crystallize this, make/update a Skill, apply everywhere, automatic, closed-loop, or smarter Skill evolution. On trigger, run cycle, log only clear methodology signals, cluster locally/globally, recommend Project Rule / Skill Patch / Personal Global Skill, and ask for the user gate. Do not use for ordinary prompt writing, generic memory, personal preferences, one-off facts, normal bug fixes, or tasks without a methodology signal.
+description: Methodology Skill for reusable workflow signals in Agent Skills-compatible coding agents. Use when work reveals a repeatable method, transferable failure, or an explicit request to crystallize/update a Skill; skip one-off bugs and preferences.
 ---
 
 # jinhua
@@ -192,7 +192,9 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> prop
   --decision proposed_edit \
   --placement <project_rule|skill_patch|personal_global_skill> \
   --target "<target Skill / file / insertion location>" \
-  --patch "<1-3 sentence patch>" \
+  --patch "## <Short Rule Title>
+
+<Complete Markdown rule block.>" \
   --risk "<main side effect>"
 ```
 
@@ -242,7 +244,7 @@ Target:
 [target Skill / file / insertion location]
 
 Patch:
-[1-3 sentence patch]
+[complete Markdown block, not a loose sentence]
 
 Risk:
 [main side effect]

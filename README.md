@@ -160,7 +160,9 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
   --decision proposed_edit \
   --placement skill_patch \
   --target "target-skill/SKILL.md / research workflow" \
-  --patch "When recommending reusable external projects for adoption, verify the README and relevant source before claiming usefulness." \
+  --patch "## Source-Backed Recommendations
+
+When recommending reusable external projects for adoption, verify the README and relevant source before claiming usefulness." \
   --risk "Can add work when the user only wants quick pointers."
 ```
 
@@ -177,6 +179,11 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-propos
   --proposal-id <prop_id> \
   --placement skill_patch \
   --target-skill target-skill \
+  --target-skill-path "<target-skill-dir>/SKILL.md" \
+  --insert-after "## Use This When" \
+  --patch "## Source-Backed Recommendations
+
+When recommending reusable external projects for adoption, verify the README and relevant source before claiming usefulness." \
   --summary "Added source-backed recommendation rule"
 ```
 
