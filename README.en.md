@@ -31,6 +31,15 @@ cycle
 
 `cycle` is the automatic checkpoint. It initializes missing runtime state, scans local clusters, imports local signals into the global promotion layer, surfaces pending gates, and prints proposal skeleton hints for ready clusters.
 
+## Wake-Up Mechanism
+
+`jinhua` is not a background daemon. Automatic use has two small layers:
+
+1. The host agent normally sees only `name` and `description` from `SKILL.md`, so the token cost stays low.
+2. When the task contains a methodology signal, such as a workflow correction, repeated reusable method, transferable fixed failure, or phrases like "remember this", "crystallize this", "write into a Skill", or "apply everywhere", the agent loads the full Skill and runs `cycle` first.
+
+So jinhua can trigger even when the user does not name it, but only when the current task has a real methodology signal. Ordinary bugs, one-off preferences, local paths, and temporary commands should not wake it.
+
 ## Rules
 
 jinhua records only reusable methodology signals. A signal should have a future `trigger` plus `action`.

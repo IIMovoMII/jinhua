@@ -1,6 +1,6 @@
 ---
 name: jinhua
-description: Methodology Skill evolution assistant for Agent Skills-compatible coding agents, including Claude Code and Codex. Use when task work reveals reusable prompting habits, user corrections, repeated reasoning failures, successful reasoning traces, Skill self-improvement opportunities, compact Skill update proposals, or when a user asks to make Skill evolution automatic/closed-loop. The Skill proactively runs its cycle command, silently accumulates reusable methodology signals, clusters them locally and globally, recommends the right placement layer, and asks the user for a placement-aware gate when evidence is strong enough. Do not use for ordinary prompt writing, generic memory, personal preferences, or normal task execution without a methodology signal.
+description: Methodology Skill evolution assistant for Agent Skills-compatible coding agents, including Claude Code and Codex. Use when work reveals reusable prompting/workflow methods: user corrections to reasoning or verification, repeated same-project methods, fixed failures with transferable causes, reusable success traces, missing or costly Skill rules, or phrases like remember this, always do this, crystallize this, make/update a Skill, apply everywhere, automatic, closed-loop, or smarter Skill evolution. On trigger, run cycle, log only clear methodology signals, cluster locally/globally, recommend Project Rule / Skill Patch / Personal Global Skill, and ask for the user gate. Do not use for ordinary prompt writing, generic memory, personal preferences, one-off facts, normal bug fixes, or tasks without a methodology signal.
 ---
 
 # jinhua
@@ -27,8 +27,21 @@ Use this Skill when the current work reveals a reusable methodology signal:
 - Several prompts express the same higher-level method.
 - A Skill rule is missing, duplicated, too broad, too narrow, or too costly.
 - The user asks to make Skill evolution automatic, closed-loop, or more intelligent.
+- The user says to remember, crystallize, write into a Skill, update a Skill, or apply a method everywhere.
 
 Do not use it for one-off facts, style preferences, private memory, ordinary bug fixes, or generic prompt templates.
+
+## Trigger Boundary
+
+After this Skill is selected, keep the wake-up boundary tight:
+
+| Case | Action |
+| --- | --- |
+| User correction changes reasoning, verification, or workflow | Run `cycle`; consider `log-signal` if it can be written as `trigger` plus `action`. |
+| Same project repeats one reusable method | Run `cycle`; log only if the method is not local noise. |
+| A fixed failure exposes a transferable cause | Finish the user task first, then consider a quiet `failure_trace`. |
+| User asks to remember, crystallize, make a Skill, or apply everywhere | Run `cycle`; use the placement ladder. |
+| One-off bug, preference, local path, temporary command, or generic memory | Skip jinhua work. |
 
 ## Interaction Language
 
@@ -49,6 +62,8 @@ Keep durable data and executable identifiers stable:
 ## Automatic Checkpoint
 
 A Skill cannot run as a true background daemon. Automatic means: whenever this Skill triggers, run `cycle`.
+
+The wake-up mechanism is intentionally small: the host agent sees only this Skill's metadata until a task matches it, then loads this file and runs `cycle`. Do not add daemon, hook, or machine-learning behavior unless the user explicitly asks for that implementation.
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> cycle
