@@ -1,11 +1,13 @@
-# Code Of Conduct
+# 行为准则
 
-This project uses a simple contributor standard:
+语言：简体中文 | [English](CODE_OF_CONDUCT.en.md)
 
-- Be respectful and constructive.
-- Discuss ideas and tradeoffs, not personal attributes.
-- Keep issues and pull requests focused on jinhua.
-- Do not post private data, credentials, or sensitive project content.
-- Assume good intent, but accept correction quickly.
+本项目使用简洁的贡献者准则：
 
-Maintainers may edit or remove comments, close threads, or block participation when behavior makes collaboration unsafe or unproductive.
+- 保持尊重和建设性。
+- 讨论想法、证据和取舍，不攻击个人。
+- 议题（Issue）和拉取请求（Pull Request）聚焦 jinhua。
+- 不发布隐私数据、凭证或敏感项目内容。
+- 默认善意；被纠正时，及时调整。
+
+如果某些行为让协作变得不安全或低效，维护者可以编辑或删除评论、关闭讨论，或限制参与。

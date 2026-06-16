@@ -1,6 +1,6 @@
 # 维护规则
 
-> [../maintenance.md](../maintenance.md) 是英文主版本；本文件是中文维护说明。
+> 英文参考见 [../maintenance.md](../maintenance.md)；本文件是中文维护说明。
 
 这个项目的形态是：一个 Skill，加一个单文件 CLI。除非真实使用证明有必要，否则不要把它做大。
 
@@ -9,7 +9,8 @@
 - `SKILL.md` 是智能体（Agent）实际读取的控制面，不是知识库。
 - `SKILL.zh-CN.md` 是中文说明，不替代英文控制面。
 - `README.md` 是英文用户指南。
-- `README.zh-CN.md` 是中文用户指南。
+- `README.md` 是默认中文用户指南。
+- `README.en.md` 是英文辅助文档。
 - `PROJECT_MAP.md` 是英文项目地图。
 - `PROJECT_MAP.zh-CN.md` 是中文项目地图。
 - `references/` 主目录保持精简。
@@ -42,8 +43,8 @@ CLI 不能做：
 
 ## 中文文档规则
 
-- 英文文档是主版本。
-- 英文语义变化时，检查对应中文文档是否需要同步。
+- 中文公开文档是默认用户入口。
+- 用户可见行为变化时，同时检查中文默认文档和英文辅助文档。
 - CLI 命令、参数名、JSON 字段、operator id 不翻译。
 - 中文文档要解释这些英文名的含义，不要只照搬英文词。
 - [glossary.md](glossary.md) 是中文用户理解参数的入口。

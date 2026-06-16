@@ -1,6 +1,6 @@
 # Hook 与平台集成
 
-> [../hook-integration.md](../hook-integration.md) 是英文主版本；本文件说明中文用户该怎么理解平台集成。
+> 英文参考见 [../hook-integration.md](../hook-integration.md)；本文件说明中文用户该怎么理解平台集成。
 
 `cycle` 是 jinhua 的自动检查点。平台可以帮忙调用它，但不能改变安全模型。
 

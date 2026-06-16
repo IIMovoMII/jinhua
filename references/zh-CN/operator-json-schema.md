@@ -1,6 +1,6 @@
 # 运行态结构
 
-> [../operator-json-schema.md](../operator-json-schema.md) 是英文主版本；本文件用中文解释各个 JSON/JSONL 文件的作用。
+> 英文参考见 [../operator-json-schema.md](../operator-json-schema.md)；本文件用中文解释各个 JSON/JSONL 文件的作用。
 
 所有 JSONL 文件都是“一行一个 JSON 对象”。字段名保持英文，避免脚本和旧数据不兼容。
 

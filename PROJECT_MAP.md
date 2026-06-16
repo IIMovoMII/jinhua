@@ -16,9 +16,13 @@ Responsibility split:
 jinhua/
 |-- SKILL.md
 |-- README.md
+|-- README.en.md
 |-- CONTRIBUTING.md
+|-- CONTRIBUTING.en.md
 |-- SECURITY.md
+|-- SECURITY.en.md
 |-- CODE_OF_CONDUCT.md
+|-- CODE_OF_CONDUCT.en.md
 |-- PROJECT_MAP.md
 |-- CHANGELOG.md
 |-- .github/

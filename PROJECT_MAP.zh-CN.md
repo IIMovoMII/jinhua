@@ -1,6 +1,6 @@
 # 项目地图
 
-> [PROJECT_MAP.md](PROJECT_MAP.md) 是英文主版本；本文件是中文说明，帮助中文用户快速看懂项目结构。
+> 本文件是中文项目地图；英文辅助版本见 [PROJECT_MAP.md](PROJECT_MAP.md)。
 
 ## 产品形态
 
@@ -19,13 +19,13 @@ jinhua/
 ├── SKILL.md
 ├── SKILL.zh-CN.md
 ├── README.md
-├── README.zh-CN.md
+├── README.en.md
 ├── CONTRIBUTING.md
-├── CONTRIBUTING.zh-CN.md
+├── CONTRIBUTING.en.md
 ├── SECURITY.md
-├── SECURITY.zh-CN.md
+├── SECURITY.en.md
 ├── CODE_OF_CONDUCT.md
-├── CODE_OF_CONDUCT.zh-CN.md
+├── CODE_OF_CONDUCT.en.md
 ├── PROJECT_MAP.md
 ├── PROJECT_MAP.zh-CN.md
 ├── CHANGELOG.md

@@ -7,15 +7,16 @@ This project is a small Skill + single-file CLI. Keep it that way unless real us
 - `SKILL.md` is the control plane, not a knowledge base.
 - `SKILL.zh-CN.md` is a Chinese explanation, not the active control plane.
 - `README.md` is the user-facing usage guide.
-- `README.zh-CN.md` is the Chinese user-facing usage guide.
+- `README.md` is the default Chinese user-facing usage guide.
+- `README.en.md` is the English mirror.
 - `PROJECT_MAP.md` is the navigation map.
 - `references/` must stay under 8 files.
 - Do not add a new reference file if an existing one can hold the content.
 
 ## Localization Rules
 
-- English docs are the canonical source.
-- When English semantics change, check the matching Chinese mirror.
+- Chinese public docs are the default source for user-facing pages.
+- When user-facing behavior changes, check both Chinese defaults and English mirrors.
 - Do not translate CLI commands, option names, JSON field names, or operator ids.
 - Explain those English identifiers in `references/zh-CN/glossary.md`.
 - User-facing Skill dialogue should follow the user's current language.

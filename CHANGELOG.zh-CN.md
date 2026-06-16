@@ -1,6 +1,6 @@
 # 更新日志
 
-> [CHANGELOG.md](CHANGELOG.md) 是英文主版本；本文件是中文更新说明。
+> 本文件是中文更新说明；英文辅助版本见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 2026-06-15 带落点的用户确认
 
@@ -13,7 +13,7 @@
 - 发布 `jinhua`：一个用于 Skill 进化的本地闭环工具，适用于 Codex、Claude Code 等支持 Skill 的编程智能体（Agent）。
 - 新增英文和中文文档：`README`、`SKILL`、`PROJECT_MAP`、贡献指南、安全政策和行为准则。
 - 新增 `references/zh-CN/`，说明 CLI 用法、数据政策、平台集成、维护规则、运行态结构和术语。
-- 保留英文文档作为主版本，同时提供可读的中文说明。
+- 中文文档作为默认公开版本，同时保留英文辅助文档。
 - CLI 命令、参数名、JSON 字段和 operator id 保持英文，并在中文术语表里解释。
 
 ## 核心能力

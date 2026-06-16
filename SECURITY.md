@@ -1,26 +1,28 @@
-# Security Policy
+# 安全政策
 
-## Supported Versions
+语言：简体中文 | [English](SECURITY.en.md)
 
-The `main` branch is the supported development line.
+## 支持版本
 
-## Reporting A Vulnerability
+`main` 分支是当前支持的开发主线。
 
-Please open a private security advisory on GitHub when available. If private advisories are not available, open a minimal public issue without sensitive exploit details and ask for a private contact path.
+## 报告漏洞
 
-Do not include secrets, user data, private prompts, or proprietary project content in public reports.
+如果 GitHub 的私密安全通告（private security advisory）可用，请优先使用它。否则可以开一个不包含敏感利用细节的公开议题（issue），并请求私下联系方式。
 
-## Scope
+不要在公开报告中包含密钥、用户数据、私有 prompt 或专有项目内容。
 
-jinhua is a local ledger Skill. Security-relevant reports include:
+## 范围
 
-- Sensitive data written to global state.
-- Raw user text or project paths leaking into files intended for sharing.
-- Command execution behavior that is broader than documented.
-- Data corruption that can cause unintended Skill changes.
+jinhua 是本地账本型 Skill。安全相关问题包括：
 
-## Out Of Scope
+- 敏感数据被写入全局状态。
+- 用户原文或项目路径泄露到适合共享的文件中。
+- 命令执行行为超出文档范围。
+- 数据损坏导致非预期 Skill 修改。
 
-- Requests to bypass the user gate.
-- Reports that require storing credentials in the repository.
-- Vulnerabilities in unrelated host agents or IDEs.
+## 不在范围内
+
+- 要求绕过用户确认门。
+- 需要把凭证写入仓库的问题。
+- 宿主智能体（Agent）、IDE 或操作系统自身的无关漏洞。

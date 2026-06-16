@@ -9,9 +9,9 @@
 ## 2026-06-15 Public Release
 
 - Published `jinhua` as a compact Skill + CLI for user-gated Skill evolution.
-- Added English and Chinese documentation: `README.md`, `SKILL.md`, `PROJECT_MAP.md`, and matching `zh-CN` mirrors.
+- Added English and Chinese documentation: default Chinese public docs plus English mirrors.
 - Added `references/zh-CN/` with translated CLI, schema, data policy, hook, maintenance, and glossary docs.
-- Kept English as the canonical source while making Chinese docs first-class user documentation.
+- Made Chinese the default public documentation while keeping English mirrors for international users.
 - Kept CLI commands, option names, JSON field names, and operator ids in English, with Chinese explanations in the glossary.
 
 ## Product Features
