@@ -1,6 +1,6 @@
 ---
 name: jinhua
-description: Methodology Skill for reusable workflow signals in Agent Skills-compatible coding agents. Use when work reveals a repeatable method, user correction, transferable failure, or an explicit request to remember, crystallize, update a Skill, apply everywhere, or improve Skill evolution; skip one-off bugs and preferences.
+description: Methodology Skill for reusable workflow signals and Skill evolution in Agent Skills-compatible coding agents. Use when user feedback semantically corrects the agent's workflow, verification standard, reasoning direction, tool/Skill choice, missed expected procedure, or Skill-evolution behavior; when work reveals a repeatable method, transferable failure, repeated pattern, Skill-rule gap, or explicit request to preserve a method as a Skill, project rule, AGENTS.md rule, or global practice. Skip one-off content fixes, private facts, ordinary preferences, task-local bugs, and non-transferable details.
 ---
 
 # jinhua
@@ -38,10 +38,32 @@ After this Skill is selected, keep the wake-up boundary tight:
 | Case | Action |
 | --- | --- |
 | User correction changes reasoning, verification, or workflow | Run `cycle`; consider `log-signal` if it can be written as `trigger` plus `action`. |
+| User feedback semantically corrects workflow, verification, reasoning direction, Skill/tool choice, or a missed expected procedure | Run `cycle`; use the Correction-Act Detector; log only if the lesson can become reusable `trigger` plus `action`. |
 | Same project repeats one reusable method | Run `cycle`; log only if the method is not local noise. |
 | A fixed failure exposes a transferable cause | Finish the user task first, then consider a quiet `failure_trace`. |
 | User asks to remember, crystallize, make a Skill, or apply everywhere | Run `cycle`; use the placement ladder. |
 | One-off bug, preference, local path, temporary command, or generic memory | Skip jinhua work. |
+
+## Correction-Act Detector
+
+Treat user feedback as a jinhua candidate when it changes how future work should be done, not merely what the current answer should say. The detector is semantic: do not depend on exact wording. Ask whether the user is correcting an agent action, omission, verification standard, tool choice, or reusable workflow assumption.
+
+Likely correction-acts:
+
+| Semantic signal | Meaning | Action |
+| --- | --- | --- |
+| Corrects workflow order or method | The previous process was wrong, incomplete, or in the wrong sequence. | Run `cycle`; log if it generalizes into `trigger` plus `action`. |
+| Corrects verification depth | The user requires a stronger or different check before judging success. | Run `cycle`; log if the verification rule transfers. |
+| Points out a missed expected Skill, tool, or procedure | The user expected a capability or workflow to activate and asks why it did not. | Run `cycle`; consider `skill_patch` if the missed activation is reusable. |
+| Converts a local mistake into a future rule | Similar future tasks should follow the corrected method. | Log a signal unless it is purely task-local. |
+| Gives feedback about Skill evolution behavior | The user critiques when Skill evolution should wake up, decide, or improve itself. | Treat as a self-improvement signal; propose the smallest patch and wait for the user gate. |
+
+Before logging, both must be true:
+
+1. The lesson can be written as a reusable `trigger` plus `action`.
+2. Applying it in a future similar task would help without knowing current private details.
+
+If either is false, finish the user task and skip jinhua.
 
 ## Interaction Language
 
