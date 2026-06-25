@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-06-25 Hook-Aware Wake Check
+
+- Added read-only `wake-check` for cheap hook pre-routing before loading the full Skill.
+- Added `cycle --json --fail-on-pending-gate` so hook runners can treat pending user gates as exit code `2`.
+- Documented the hook contract: use `wake-check` for coarse routing, then keep precise methodology judgment inside `jinhua`.
+
 ## 2026-06-15 Placement-Aware Gate
 
 - Added explicit proposal placements: `project_rule`, `skill_patch`, and `personal_global_skill`.

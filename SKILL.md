@@ -91,6 +91,14 @@ The wake-up mechanism is intentionally small: the host agent sees only this Skil
 python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> cycle
 ```
 
+Hosts that support pre-routing may first run the read-only coarse check:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
+```
+
+If `wake-check` returns `should_route: true`, load this Skill and run `cycle`. Do not let `wake-check` log signals or decide transferability; it is only a cheap wake-up filter.
+
 `cycle` is the deterministic checkpoint:
 
 1. Initializes `.jinhua/data/` if missing.
@@ -101,7 +109,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> cycl
 
 Run `cycle` at the start of a triggered invocation, after any ledger-changing command, and before finishing substantial work that contained a clear methodology signal.
 
-If `cycle` reports pending local or global proposals, process that user gate before creating new proposals.
+If `cycle` reports pending local or global proposals, surface one user gate immediately before creating new proposals or continuing the jinhua branch. Hook runners may use `cycle --json --fail-on-pending-gate`; exit code `2` means a pending gate must be shown to the user.
 
 ## Runtime Data
 

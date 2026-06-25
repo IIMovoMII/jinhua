@@ -32,7 +32,8 @@ jinhua/
 |   |   `-- config.yml
 |   `-- PULL_REQUEST_TEMPLATE.md
 |-- scripts/
-|   `-- jinhua.py
+|   |-- jinhua.py
+|   `-- test_wake_check.py
 |-- references/
 |   |-- cli-usage.md
 |   |-- operator-json-schema.md
@@ -68,6 +69,7 @@ jinhua/global-data/
 
 - `init`
 - `cycle`
+- `wake-check`
 - `log-signal`
 - `list-clusters`
 - `propose`

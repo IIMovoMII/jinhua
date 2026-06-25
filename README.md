@@ -53,6 +53,14 @@ cycle
 
 这意味着：没提到 `jinhua` 也可以被调用，但前提是当前任务真的出现了方法论信号。普通 bug、一次性偏好、本地路径、临时命令不会触发，这是为了少打扰、少耗 token。
 
+如果宿主 agent 支持前置路由，可以先跑只读粗筛：
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
+```
+
+`wake-check` 只判断是否应该优先路由到 jinhua，不记录用户原文，也不替你生成经验。真正的记录、聚类和提案仍然从 `cycle` 开始。
+
 ## 判断规则
 
 `jinhua` 只记录可复用的方法论信号。能记录的经验，至少要能写成未来的 `trigger`（什么时候用）和 `action`（怎么做）。
@@ -204,6 +212,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
 ## 常用命令
 
 - `cycle`：自动检查点。
+- `wake-check`：只读前置粗筛，判断是否应优先路由到 jinhua。
 - `log-signal`：记录方法论信号。
 - `list-clusters`：查看本地聚类。
 - `propose`：创建本地提案。

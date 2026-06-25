@@ -2,6 +2,12 @@
 
 > 本文件是中文更新说明；英文辅助版本见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 2026-06-25 支持 hook 的轻量唤醒检查
+
+- 新增只读命令 `wake-check`，用于 hook 在加载完整 Skill 前做便宜的前置路由。
+- 新增 `cycle --json --fail-on-pending-gate`，让 hook 可以用退出码 `2` 识别待确认提案。
+- 明确 hook 契约：`wake-check` 只做粗筛，精确的方法论判断仍然留在 jinhua 内部。
+
 ## 2026-06-15 带落点的用户确认
 
 - 新增明确提案落点：`project_rule`、`skill_patch`、`personal_global_skill`。

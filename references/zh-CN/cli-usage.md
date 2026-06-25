@@ -18,9 +18,19 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 - 提示是否有待确认提案。
 - 为已经成熟的聚类打印提案骨架，包括建议落点（`placement_hint`）。如果建议落点是 `skill_patch`，还会尽量给出具体本地 Skill 和路径；如果建议落点是 `project_rule`，会给出 `recommended_project_rule_file`。
 
-`--json` 会输出机器可读结果。`--no-global` 只建议在测试或调试时使用。
+`--json` 会输出机器可读结果。如果 hook 需要把待确认提案当成硬信号，可以加 `--fail-on-pending-gate`；存在本地或全局待确认提案时，命令会用退出码 `2` 结束。`--no-global` 只建议在测试或调试时使用。
 
 `--agent-profile` 或环境变量 `JINHUA_AGENT_PROFILE` 可以影响项目规则文件推荐。支持 `codex`、`claude`、`copilot`、`trae`、`hermes`、`openclaw`、`workbuddy`，未知 agent 会走 generic/custom 兜底。
+
+## 唤醒粗筛
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
+```
+
+`wake-check` 是只读的前置路由检查。它会在粗粒度上识别几类元工作流线索：Skill 没触发、流程纠正、验证标准纠正，或用户要求把方法沉淀下来。它不会运行 `cycle`，不会记录信号，不会保存用户原文，也不会创建提案。
+
+支持 hook 的宿主可以在加载完整 Skill 前先用它粗筛。返回 `should_route: true` 时，再路由到 jinhua 并运行 `cycle`；返回 `false` 时，继续当前任务即可。
 
 ## 项目身份
 

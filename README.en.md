@@ -40,6 +40,14 @@ cycle
 
 So jinhua can trigger even when the user does not name it, but only when the current task has a real methodology signal. Ordinary bugs, one-off preferences, local paths, and temporary commands should not wake it.
 
+Hosts with pre-routing support can run the read-only coarse check:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
+```
+
+`wake-check` only decides whether to prioritize jinhua. It does not store user text, log experience, or create proposals. Real recording, clustering, and proposal work still starts with `cycle`.
+
 ## Rules
 
 jinhua records only reusable methodology signals. A signal should have a future `trigger` plus `action`.
@@ -167,6 +175,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
 Primary workflow:
 
 - `cycle`
+- `wake-check`
 - `log-signal`
 - `list-clusters`
 - `propose`

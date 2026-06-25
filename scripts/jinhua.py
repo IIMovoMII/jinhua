@@ -121,6 +121,28 @@ GLOBAL_FAST_PROJECT_THRESHOLD = 2
 GLOBAL_FAST_STRENGTH_THRESHOLD = 6
 DEFAULT_RUNTIME_DIR_NAME = ".jinhua"
 
+WAKE_POSITIVE_PATTERNS = [
+    r"\bjinhua(?:\.skill)?\b",
+    r"\b(skill|tool|procedure|workflow|verification|reasoning|methodology)\b.*\b(trigger|wake|activate|route|call|load|select|missed|should have)\b",
+    r"\b(trigger|wake|activate|route|call|load|select|missed|should have)\b.*\b(skill|tool|procedure|workflow|verification|reasoning|methodology)\b",
+    r"\b(remember|crystallize|preserve|generalize|write|save)\b.*\b(skill|rule|practice|method|workflow|procedure|agents\.md|claude\.md)\b",
+    r"\b(next time|future|from now on|going forward)\b.*\b(should|must|always|never|verify|check|use|run|call)\b",
+    r"\bshould have\b.*\b(verified|checked|used|called|run|triggered|loaded|selected)\b",
+    r"\b(verify|check|use|call|run|trigger|load|select)\b.*\bbefore\b.*\b(answering|finishing|claiming|recommending)\b",
+    r"为什么.*(没|沒有|没有|未).*(触发|调用|唤醒|啟動|启动|執行|执行)",
+    r"(应该|應該|本该|本應|需要).*(触发|调用|唤醒|啟動|启动|執行|执行).*(skill|工具|流程|jinhua)",
+    r"(以后|下次|今后|往后).*(应该|應該|必须|一定|先|记住|沉淀|写进)",
+    r"(工作流|流程|验证|驗證|推理|工具|skill|技能|规则|規則).*(不对|不對|错了|錯了|漏了|没做|沒做|应该|應該)",
+    r"(应该|應該|必须|一定|先).*(验证|驗證|检查|檢查|确认|確認).*(再|后|後).*(回答|完成|判断|判斷|推荐|推薦)",
+]
+
+WAKE_NEGATIVE_PATTERNS = [
+    r"^\s*(no|不是|不对|不對|错了|錯了)[，,:\s]+.{0,80}$",
+    r"\b(page|slide|line|row|column|cell|chapter|section)\s+\d+",
+    r"\btypo\b|\bspelling\b|\bgrammar\b",
+    r"(页|頁|行|列|段|章|节|節|幻灯片|投影片)\s*\d+",
+]
+
 GENERIC_PROJECT_RULE_FILES = [
     "AGENTS.md",
     "CLAUDE.md",
@@ -410,6 +432,10 @@ def read_json(path: Path, default: dict) -> dict:
 def write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def regex_hits(patterns: list[str], text: str) -> list[str]:
+    return [pattern for pattern in patterns if re.search(pattern, text, flags=re.I)]
 
 
 def read_state(args: argparse.Namespace) -> dict:
@@ -1444,6 +1470,8 @@ def command_global_cycle(args: argparse.Namespace) -> None:
 
     if args.json:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
+        if getattr(args, "fail_on_pending_gate", False) and summary["pending_proposals"]:
+            raise SystemExit(2)
         return
 
     print(f"Global runtime: {summary['global_runtime']}")
@@ -1486,6 +1514,9 @@ def command_global_cycle(args: argparse.Namespace) -> None:
                     print(f"  recommended_skill: {skeleton.get('recommended_skill', '')}")
                     print(f"  recommended_skill_path: {skeleton.get('recommended_skill_path', '')}")
                 print(f"  target_hint: {skeleton.get('target_hint', '')}")
+
+    if getattr(args, "fail_on_pending_gate", False) and summary["pending_proposals"]:
+        raise SystemExit(2)
 
 
 def command_global_status(args: argparse.Namespace) -> None:
@@ -1552,6 +1583,43 @@ def command_global_merge_suggestions(args: argparse.Namespace) -> None:
         print(f"  right: {item['right_method']}")
         print(f"  shared_terms: {', '.join(item['shared_terms'])}")
         print("  action: review before any merge proposal; no files were changed.")
+
+
+def wake_check_result(text: str) -> dict:
+    normalized = " ".join(str(text or "").strip().split()).lower()
+    positive = regex_hits(WAKE_POSITIVE_PATTERNS, normalized)
+    negative = regex_hits(WAKE_NEGATIVE_PATTERNS, normalized)
+    should_route = bool(positive) and not (negative and len(positive) == 1 and "jinhua" not in normalized)
+    if should_route:
+        reason = "meta-workflow correction or Skill-evolution cue"
+    elif negative:
+        reason = "likely task-local correction"
+    else:
+        reason = "no reusable workflow cue"
+    return {
+        "should_route": should_route,
+        "reason": reason,
+        "positive_matches": positive[:3],
+        "negative_matches": negative[:3],
+        "next_command": "cycle" if should_route else "",
+    }
+
+
+def command_wake_check(args: argparse.Namespace) -> None:
+    if args.text:
+        text = args.text
+    else:
+        text = sys.stdin.read()
+    result = wake_check_result(text)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"should_route: {str(result['should_route']).lower()}")
+        print(f"reason: {result['reason']}")
+        if result["next_command"]:
+            print(f"next: {result['next_command']}")
+    if args.exit_code and not result["should_route"]:
+        raise SystemExit(1)
 
 
 def command_global_propose(args: argparse.Namespace) -> None:
@@ -2213,6 +2281,11 @@ def command_cycle(args: argparse.Namespace) -> None:
 
     if args.json:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
+        pending_gate = bool(summary["pending_proposals"] or (
+            summary.get("global") and summary["global"]["pending_proposals"]
+        ))
+        if getattr(args, "fail_on_pending_gate", False) and pending_gate:
+            raise SystemExit(2)
         return
 
     state_label = "created" if initialized else "ready"
@@ -2313,6 +2386,12 @@ def command_cycle(args: argparse.Namespace) -> None:
         global_summary and (global_summary["pending_proposals"] or global_summary["ready_clusters"])
     ):
         print("\nNext: continue the task; log only clear reusable methodology signals.")
+
+    pending_gate = bool(summary["pending_proposals"] or (
+        global_summary and global_summary["pending_proposals"]
+    ))
+    if getattr(args, "fail_on_pending_gate", False) and pending_gate:
+        raise SystemExit(2)
 
 
 def command_validate(args: argparse.Namespace) -> None:
@@ -2641,11 +2720,27 @@ def build_parser() -> argparse.ArgumentParser:
     cycle_parser.add_argument("--allow-skill-source-runtime", action="store_true")
     cycle_parser.add_argument("--json", action="store_true", help="Emit machine-readable status")
     cycle_parser.add_argument("--no-global", action="store_true", help="Skip automatic global promotion scan")
+    cycle_parser.add_argument(
+        "--fail-on-pending-gate",
+        action="store_true",
+        help="Exit 2 when local or global pending user gates are present.",
+    )
     cycle_parser.set_defaults(func=command_cycle)
 
     global_cycle_parser = subparsers.add_parser("global-cycle", help="Import local signals and print global promotion state")
     global_cycle_parser.add_argument("--json", action="store_true", help="Emit machine-readable status")
+    global_cycle_parser.add_argument(
+        "--fail-on-pending-gate",
+        action="store_true",
+        help="Exit 2 when pending user gates are present.",
+    )
     global_cycle_parser.set_defaults(func=command_global_cycle)
+
+    wake_parser = subparsers.add_parser("wake-check", help="Cheap read-only check for whether jinhua should be routed")
+    wake_parser.add_argument("--text", default="", help="User message to classify. Defaults to stdin.")
+    wake_parser.add_argument("--json", action="store_true", help="Emit machine-readable routing result")
+    wake_parser.add_argument("--exit-code", action="store_true", help="Exit 0 when routed, 1 when skipped.")
+    wake_parser.set_defaults(func=command_wake_check)
 
     signal_parser = subparsers.add_parser("log-signal", help="Record a model-detected methodology signal")
     signal_parser.add_argument("--source-type", required=True, choices=SOURCE_TYPES)

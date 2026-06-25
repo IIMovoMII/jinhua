@@ -10,9 +10,19 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 
 `cycle` initializes missing runtime files, summarizes local state, imports active local signals into global promotion state, surfaces pending gates, and prints proposal skeleton hints for ready clusters. Ready skeletons include `placement_hint`; when the hint is `skill_patch`, they include the concrete recommended local Skill and path when one can be matched. When the hint is `project_rule`, they include `recommended_project_rule_file`.
 
-Use `--json` for machine-readable output. Use `--no-global` only for tests or debugging.
+Use `--json` for machine-readable output. Use `--fail-on-pending-gate` when a hook needs exit code `2` for pending local or global user gates. Use `--no-global` only for tests or debugging.
 
 Use `--agent-profile` or `JINHUA_AGENT_PROFILE` to tune project-rule file recommendations. Supported profiles are `codex`, `claude`, `copilot`, `trae`, `hermes`, `openclaw`, `workbuddy`, and generic/custom fallback.
+
+## Wake Check
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
+```
+
+`wake-check` is a read-only pre-routing check. It returns `should_route: true` for coarse meta-workflow cues such as missed Skill activation, workflow correction, verification-standard correction, or requests to preserve a method. It does not run `cycle`, log signals, store user text, or create proposals.
+
+Use it before loading the full Skill in hook-enabled hosts. If it returns `should_route: true`, route to jinhua and run `cycle`; if it returns `false`, continue the task normally.
 
 ## Project Identity
 

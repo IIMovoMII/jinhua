@@ -37,7 +37,8 @@ jinhua/
 │   │   └── config.yml
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── scripts/
-│   └── jinhua.py
+│   ├── jinhua.py
+│   └── test_wake_check.py
 ├── references/
 │   ├── cli-usage.md
 │   ├── data-policy.md
@@ -82,6 +83,7 @@ jinhua/global-data/
 
 - `init`：初始化运行态。
 - `cycle`：自动检查点。
+- `wake-check`：只读唤醒粗筛。
 - `log-signal`：记录方法论信号。
 - `list-clusters`：查看本地聚类。
 - `propose`：创建本地提案。
