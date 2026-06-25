@@ -36,6 +36,19 @@ jinhua/
 │   │   ├── feature_request.yml
 │   │   └── config.yml
 │   └── PULL_REQUEST_TEMPLATE.md
+├── .agents/
+│   └── plugins/
+│       └── marketplace.json
+├── .claude-plugin/
+│   ├── marketplace.json
+│   └── plugin.json
+├── .codex-plugin/
+│   └── plugin.json
+├── hooks/
+│   └── claude-codex-hooks.json
+├── skills/
+│   └── jinhua/
+│       └── SKILL.md
 ├── scripts/
 │   ├── jinhua.py
 │   └── test_wake_check.py
@@ -84,6 +97,7 @@ jinhua/global-data/
 - `init`：初始化运行态。
 - `cycle`：自动检查点。
 - `wake-check`：只读唤醒粗筛。
+- `hook-user-prompt-submit`：Codex / Claude Code 的 `UserPromptSubmit` hook 适配器。
 - `log-signal`：记录方法论信号。
 - `list-clusters`：查看本地聚类。
 - `propose`：创建本地提案。
@@ -119,3 +133,5 @@ jinhua/global-data/
 - 推荐落点是 `project_rule` 时，不要自动创建项目规则文件。
 - 不要添加后台进程、外部数据库、向量库、仪表盘或机器学习核心闭环。
 - 不要把宽泛的观察命令加入主流程。
+- 不要让 Skill 本体承担 hook 打包；hook 配置放在薄薄的插件层。
+- 仓库内插件元数据保持很薄：marketplace 文件负责被发现，`.codex-plugin/plugin.json` 暴露 hooks 和 skills，真正的方法论逻辑仍然集中在根目录 `SKILL.md`。

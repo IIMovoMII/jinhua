@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"<jinhua-dir>/scripts/jinhua.py\" hook-user-prompt-submit",
+            "timeout": 5,
+            "statusMessage": "Checking jinhua wake-up"
+          }
+        ]
+      }
+    ]
+  }
+}

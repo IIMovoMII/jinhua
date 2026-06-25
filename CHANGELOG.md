@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 2026-06-25 Marketplace-Backed Plugin Packaging
+
+- Added `.agents/plugins/marketplace.json` so Codex can discover `jinhua` as a real plugin source instead of only a copied Skill.
+- Expanded `.codex-plugin/plugin.json` into a real plugin manifest with `skills` and `hooks`.
+- Added `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` for Claude Code style plugin packaging.
+- Added `skills/jinhua/SKILL.md` as a thin plugin entry that delegates to the canonical root `SKILL.md`.
+
+## 2026-06-25 Thin Plugin Hook Layer
+
+- Added a minimal `.codex-plugin/plugin.json` and thin `hooks/` layer for Codex and Claude Code hook packaging.
+- Kept the Skill itself focused on `SKILL.md` + `hook-user-prompt-submit`; the new hook layer just routes to the existing adapter.
+- Updated the project map and hook docs to make the packaging boundary explicit.
+
+## 2026-06-25 Codex / Claude Code Hook Adapter
+
+- Added `hook-user-prompt-submit`, a read-only `UserPromptSubmit` adapter for Codex / Claude Code style hooks.
+- The adapter reads hook JSON from stdin, extracts common prompt fields, and emits `hookSpecificOutput.additionalContext` only when `wake-check` matches.
+- Clarified that Codex compatibility still primarily comes from `SKILL.md` metadata; hook execution is optional and host-config dependent.
+
 ## 2026-06-25 Hook-Aware Wake Check
 
 - Added read-only `wake-check` for cheap hook pre-routing before loading the full Skill.

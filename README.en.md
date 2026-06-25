@@ -48,6 +48,25 @@ python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" 
 
 `wake-check` only decides whether to prioritize jinhua. It does not store user text, log experience, or create proposals. Real recording, clustering, and proposal work still starts with `cycle`.
 
+Codex / Claude Code `UserPromptSubmit` hooks can use the standard adapter:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
+```
+
+The shared hook shell in this repo is `hooks/claude-codex-hooks.json`.
+
+The command reads hook JSON from stdin. On a match, it returns only a short `additionalContext` hint telling the host agent to load jinhua and run `cycle`. If a user only copies the Skill files, Codex will not auto-prompt trust for hooks; the hook has to be loaded through a plugin or `.codex/` config layer to enter the trust flow.
+
+This repo now ships the plugin-layer files needed for that trust flow:
+
+- `.codex-plugin/plugin.json`
+- `.agents/plugins/marketplace.json`
+- `.claude-plugin/plugin.json`
+- `.claude-plugin/marketplace.json`
+
+In other words, `jinhua` is no longer just a Skill repo; it can also be loaded as a real Codex / Claude Code plugin source so hooks participate in the normal trust path.
+
 ## Rules
 
 jinhua records only reusable methodology signals. A signal should have a future `trigger` plus `action`.
@@ -115,6 +134,8 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> log-signal \
   --auto-init
 ```
 
+`source-type` can be `user_correction`, `success_trace`, or `failure_trace`.
+
 Re-run:
 
 ```bash
@@ -176,6 +197,7 @@ Primary workflow:
 
 - `cycle`
 - `wake-check`
+- `hook-user-prompt-submit`
 - `log-signal`
 - `list-clusters`
 - `propose`

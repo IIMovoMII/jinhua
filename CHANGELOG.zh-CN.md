@@ -2,6 +2,25 @@
 
 > 本文件是中文更新说明；英文辅助版本见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 2026-06-25 插件市场包装补齐
+
+- 新增 `.agents/plugins/marketplace.json`，让 Codex 能把 `jinhua` 当成真正插件源发现，而不只是复制进来的 Skill。
+- 把 `.codex-plugin/plugin.json` 补成真实插件清单，显式声明 `skills` 和 `hooks`。
+- 新增 `.claude-plugin/plugin.json` 和 `.claude-plugin/marketplace.json`，对齐 Claude Code 的插件包装入口。
+- 新增 `skills/jinhua/SKILL.md`，作为很薄的插件技能入口，再转到根目录权威版 `SKILL.md`。
+
+## 2026-06-25 轻量插件钩子层
+
+- 新增最小 `.codex-plugin/plugin.json` 和 `hooks/` 薄包装层，用于 Codex 和 Claude Code 的 hook 打包。
+- Skill 本体继续只负责 `SKILL.md` + `hook-user-prompt-submit`；新的 hook 层只转发到现有适配器。
+- 更新了项目地图和 hook 文档，把“Skill 本体”和“hook 打包层”的边界写清楚。
+
+## 2026-06-25 Codex / Claude Code hook 适配器
+
+- 新增只读命令 `hook-user-prompt-submit`，用于 Codex / Claude Code 这类 `UserPromptSubmit` hook。
+- 适配器从 stdin 读取 hook JSON，提取常见 prompt 字段，只在 `wake-check` 命中时输出 `hookSpecificOutput.additionalContext`。
+- 明确 Codex 兼容主路径仍然是 `SKILL.md` 元信息；hook 是否真正运行取决于宿主配置。
+
 ## 2026-06-25 支持 hook 的轻量唤醒检查
 
 - 新增只读命令 `wake-check`，用于 hook 在加载完整 Skill 前做便宜的前置路由。

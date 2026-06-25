@@ -1622,6 +1622,81 @@ def command_wake_check(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def extract_hook_prompt(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return ""
+
+    for key in ("prompt", "userPrompt", "message"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            return value
+
+    for parent_key in ("input", "payload", "event"):
+        parent = payload.get(parent_key)
+        if isinstance(parent, dict):
+            value = parent.get("prompt")
+            if isinstance(value, str):
+                return value
+    return ""
+
+
+def read_hook_payload(text: str) -> dict:
+    stripped = text.strip()
+    if not stripped:
+        return {}
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return {"prompt": text}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def hook_project_root(payload: dict, args: argparse.Namespace | None) -> Path:
+    configured = getattr(args, "project_root", ".") if args is not None else "."
+    if str(configured).strip() not in {"", "."}:
+        return Path(configured).expanduser().resolve()
+    cwd = payload.get("cwd")
+    if isinstance(cwd, str) and cwd.strip():
+        return Path(cwd).expanduser().resolve()
+    return Path(".").resolve()
+
+
+def hook_cycle_command(payload: dict, args: argparse.Namespace | None) -> str:
+    root = hook_project_root(payload, args)
+    return f'python "{Path(__file__).resolve()}" --project-root "{root}" cycle'
+
+
+def user_prompt_submit_hook_output(payload: dict, args: argparse.Namespace | None = None) -> dict:
+    prompt = extract_hook_prompt(payload)
+    result = wake_check_result(prompt)
+    output: dict = {"continue": True}
+    if not result["should_route"]:
+        return output
+
+    context = (
+        "jinhua wake-check matched a reusable workflow or Skill-evolution cue. "
+        "Load/use the jinhua Skill now and run: "
+        f"{hook_cycle_command(payload, args)}. "
+        "Then apply the Trigger Boundary and Correction-Act Detector. "
+        "Log only if the lesson can become a reusable trigger plus action; "
+        "do not apply edits without the user gate."
+    )
+    output["hookSpecificOutput"] = {
+        "hookEventName": "UserPromptSubmit",
+        "additionalContext": context,
+    }
+    return output
+
+
+def command_hook_user_prompt_submit(args: argparse.Namespace) -> None:
+    if args.text:
+        payload = {"hook_event_name": "UserPromptSubmit", "prompt": args.text}
+    else:
+        payload = read_hook_payload(sys.stdin.read())
+    output = user_prompt_submit_hook_output(payload, args)
+    print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
+
+
 def command_global_propose(args: argparse.Namespace) -> None:
     ensure_global_runtime(args)
     cluster_state = read_global_clusters(args)
@@ -2741,6 +2816,14 @@ def build_parser() -> argparse.ArgumentParser:
     wake_parser.add_argument("--json", action="store_true", help="Emit machine-readable routing result")
     wake_parser.add_argument("--exit-code", action="store_true", help="Exit 0 when routed, 1 when skipped.")
     wake_parser.set_defaults(func=command_wake_check)
+
+    hook_prompt_parser = subparsers.add_parser(
+        "hook-user-prompt-submit",
+        help="Read a UserPromptSubmit hook JSON payload and emit a routing hint",
+    )
+    hook_prompt_parser.add_argument("--text", default="", help="Prompt text for tests. Defaults to stdin JSON.")
+    hook_prompt_parser.add_argument("--pretty", action="store_true", help="Pretty-print hook JSON output.")
+    hook_prompt_parser.set_defaults(func=command_hook_user_prompt_submit)
 
     signal_parser = subparsers.add_parser("log-signal", help="Record a model-detected methodology signal")
     signal_parser.add_argument("--source-type", required=True, choices=SOURCE_TYPES)

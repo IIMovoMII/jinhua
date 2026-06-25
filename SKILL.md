@@ -17,53 +17,17 @@ The model handles detection, clustering, abstraction, placement recommendation, 
 - `No`: reject it and cool down the cluster.
 - `Revision`: record revision feedback, rewrite, and ask the same gate again.
 
-## Use This When
-
-Use this Skill when the current work reveals a reusable methodology signal:
-
-- The user corrects the model's reasoning direction, verification standard, or workflow.
-- A task succeeds because a transferable method worked.
-- A task fails or needs rework because a recurring reasoning mistake appeared.
-- Several prompts express the same higher-level method.
-- A Skill rule is missing, duplicated, too broad, too narrow, or too costly.
-- The user asks to make Skill evolution automatic, closed-loop, or more intelligent.
-- The user says to remember, crystallize, write into a Skill, update a Skill, or apply a method everywhere.
-
-Do not use it for one-off facts, style preferences, private memory, ordinary bug fixes, or generic prompt templates.
-
 ## Trigger Boundary
 
 After this Skill is selected, keep the wake-up boundary tight:
 
 | Case | Action |
 | --- | --- |
-| User correction changes reasoning, verification, or workflow | Run `cycle`; consider `log-signal` if it can be written as `trigger` plus `action`. |
-| User feedback semantically corrects workflow, verification, reasoning direction, Skill/tool choice, or a missed expected procedure | Run `cycle`; use the Correction-Act Detector; log only if the lesson can become reusable `trigger` plus `action`. |
+| User correction or feedback changes workflow, verification, reasoning direction, Skill/tool choice, or a missed expected procedure | Run `cycle`; log only if the lesson can be written as reusable `trigger` plus `action`. |
 | Same project repeats one reusable method | Run `cycle`; log only if the method is not local noise. |
 | A fixed failure exposes a transferable cause | Finish the user task first, then consider a quiet `failure_trace`. |
 | User asks to remember, crystallize, make a Skill, or apply everywhere | Run `cycle`; use the placement ladder. |
 | One-off bug, preference, local path, temporary command, or generic memory | Skip jinhua work. |
-
-## Correction-Act Detector
-
-Treat user feedback as a jinhua candidate when it changes how future work should be done, not merely what the current answer should say. The detector is semantic: do not depend on exact wording. Ask whether the user is correcting an agent action, omission, verification standard, tool choice, or reusable workflow assumption.
-
-Likely correction-acts:
-
-| Semantic signal | Meaning | Action |
-| --- | --- | --- |
-| Corrects workflow order or method | The previous process was wrong, incomplete, or in the wrong sequence. | Run `cycle`; log if it generalizes into `trigger` plus `action`. |
-| Corrects verification depth | The user requires a stronger or different check before judging success. | Run `cycle`; log if the verification rule transfers. |
-| Points out a missed expected Skill, tool, or procedure | The user expected a capability or workflow to activate and asks why it did not. | Run `cycle`; consider `skill_patch` if the missed activation is reusable. |
-| Converts a local mistake into a future rule | Similar future tasks should follow the corrected method. | Log a signal unless it is purely task-local. |
-| Gives feedback about Skill evolution behavior | The user critiques when Skill evolution should wake up, decide, or improve itself. | Treat as a self-improvement signal; propose the smallest patch and wait for the user gate. |
-
-Before logging, both must be true:
-
-1. The lesson can be written as a reusable `trigger` plus `action`.
-2. Applying it in a future similar task would help without knowing current private details.
-
-If either is false, finish the user task and skip jinhua.
 
 ## Interaction Language
 
@@ -85,7 +49,7 @@ Keep durable data and executable identifiers stable:
 
 A Skill cannot run as a true background daemon. Automatic means: whenever this Skill triggers, run `cycle`.
 
-The wake-up mechanism is intentionally small: the host agent sees only this Skill's metadata until a task matches it, then loads this file and runs `cycle`. Do not add daemon, hook, or machine-learning behavior unless the user explicitly asks for that implementation.
+The wake-up mechanism is intentionally small: the host agent sees only this Skill's metadata until a task matches it, then loads this file and runs `cycle`. Machine-learning behavior is not part of the core loop.
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> cycle
@@ -98,6 +62,14 @@ python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" 
 ```
 
 If `wake-check` returns `should_route: true`, load this Skill and run `cycle`. Do not let `wake-check` log signals or decide transferability; it is only a cheap wake-up filter.
+
+Codex and Claude Code style `UserPromptSubmit` hooks may call the hook adapter instead of manually extracting text:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> hook-user-prompt-submit
+```
+
+The adapter reads hook JSON from stdin and returns `hookSpecificOutput.additionalContext` only when the same coarse wake check matches. It must stay read-only: no signal logging, no proposal creation, no user-text storage, and no Skill edits.
 
 `cycle` is the deterministic checkpoint:
 
@@ -120,6 +92,7 @@ Project-local runtime:
 - `.jinhua/data/proposals.jsonl`
 - `.jinhua/data/adopted-edits.jsonl`
 - `.jinhua/data/rejected-proposals.jsonl`
+- `.jinhua/data/crystallized-operators.jsonl`
 - `.jinhua/data/evolution-state.json`
 
 Cross-project runtime:
@@ -130,6 +103,7 @@ Cross-project runtime:
 - `<jinhua-dir>/global-data/adopted-global-edits.jsonl`
 - `<jinhua-dir>/global-data/rejected-global-proposals.jsonl`
 - `<jinhua-dir>/global-data/project-index.json`
+- `<jinhua-dir>/global-data/global-state.json`
 
 Keep raw evidence project-local. Promote only compressed methodology evidence and hashed project identity.
 
@@ -179,6 +153,8 @@ Optional signal-card fields make cross-project merging more accurate:
 
 After `log-signal`, run `cycle`.
 
+Quiet `failure_trace` signals are for repaired failures whose cause is clearly transferable.
+
 ## Write-or-Skip Gate
 
 Do not force every lesson into a proposal. Most task details should be skipped.
@@ -193,19 +169,9 @@ Log only if the lesson can become a reusable `trigger` plus `action` and at leas
 
 Skip one-off preferences, ordinary code bugs, local paths, temporary commands, local API details, and lessons useful only in the current chat.
 
-## Failure Trace Candidate
-
-After clear failure evidence, consider a quiet `failure_trace` signal only if all are true:
-
-1. The task was fixed or the failure cause is known.
-2. The lesson can be phrased as a future `trigger` plus `action`.
-3. The lesson is not a one-off typo, missing import, or local API detail.
-
-If yes, log a quiet signal and run `cycle`. If not, do nothing. Fix the user's task first; never interrupt the task just to analyze a failure.
-
 ## Local Proposal Gate
 
-Local repetition means current need. If the same project repeatedly produces the same reusable method, propose a local settling point; do not wait for cross-project evidence. Cross-project evidence is required only for global promotion.
+Same-project repetition means current need; do not wait for cross-project evidence before proposing a local settling point.
 
 Generate a proposal when one local cluster reaches any trigger:
 
@@ -326,18 +292,3 @@ The CLI performs deterministic ledger work: init, signal append, clustering, glo
 The CLI does not decide whether a method is intelligent, transferable, or worth writing. The model makes that judgment and the user gates risk.
 
 Machine learning is not part of the core loop. If ever added, it may only assist ranking or candidate retrieval; it must not bypass deterministic rules, proposal review, validation, or the user gate.
-
-## Success Criteria
-
-A complete loop is successful when:
-
-1. A reusable methodology signal is detected.
-2. `cycle` confirms state and pending gates.
-3. The signal is logged and clustered without interrupting the user.
-4. Ready clusters produce proposal skeletons.
-5. The model creates a compact Skill Evolution Proposal with the smallest useful placement layer.
-6. If the proposal is a `skill_patch`, the model recommends the concrete local Skill and path.
-7. The user chooses Project Rule / Skill Patch / Personal Global Skill / No / Revision.
-8. The accepted or rejected outcome is recorded.
-9. Accepted changes are applied or recorded with the smallest useful patch.
-10. Cross-project promotion uses unique-project evidence and the same user gate.

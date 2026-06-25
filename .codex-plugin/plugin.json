@@ -1,0 +1,39 @@
+{
+  "name": "jinhua",
+  "version": "1.0.0",
+  "description": "Methodology Skill for reusable workflow signals and Skill evolution in coding agents.",
+  "author": {
+    "name": "IIMovoMII",
+    "url": "https://github.com/IIMovoMII"
+  },
+  "homepage": "https://github.com/IIMovoMII/jinhua",
+  "repository": "https://github.com/IIMovoMII/jinhua",
+  "license": "MIT",
+  "keywords": [
+    "skill-evolution",
+    "workflow",
+    "hooks",
+    "agent",
+    "productivity"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/claude-codex-hooks.json",
+  "interface": {
+    "displayName": "Jinhua",
+    "shortDescription": "Turn repeated workflow lessons into gated Skill improvements",
+    "longDescription": "Detect reusable workflow corrections, cluster them, and surface small gated Skill evolution proposals.",
+    "developerName": "IIMovoMII",
+    "category": "Productivity",
+    "capabilities": [
+      "Instructions",
+      "Lifecycle hooks"
+    ],
+    "websiteURL": "https://github.com/IIMovoMII/jinhua",
+    "defaultPrompt": [
+      "Use jinhua to crystallize a reusable workflow lesson.",
+      "Check whether this repeated correction should become a Skill rule.",
+      "Surface the smallest gated Skill evolution proposal."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

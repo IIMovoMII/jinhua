@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "jinhua",
+  "description": "Workflow memory and Skill evolution for coding agents.",
+  "owner": {
+    "name": "IIMovoMII",
+    "url": "https://github.com/IIMovoMII"
+  },
+  "plugins": [
+    {
+      "name": "jinhua",
+      "description": "Detect reusable workflow lessons and surface gated Skill evolution proposals.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

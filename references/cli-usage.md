@@ -24,6 +24,22 @@ python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" 
 
 Use it before loading the full Skill in hook-enabled hosts. If it returns `should_route: true`, route to jinhua and run `cycle`; if it returns `false`, continue the task normally.
 
+## UserPromptSubmit Hook Adapter
+
+Codex and Claude Code style `UserPromptSubmit` hooks can call:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
+```
+
+The command reads hook JSON from stdin. It accepts common prompt fields such as `prompt`, `userPrompt`, `message`, and `input.prompt`. For tests, use:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit --text "为什么没触发jinhua.skill？" --pretty
+```
+
+When the prompt matches the same coarse wake check, the command returns a JSON object with `continue: true` and `hookSpecificOutput.additionalContext`. When it does not match, it returns only `{"continue": true}`. The adapter is read-only and does not store the prompt.
+
 ## Project Identity
 
 Global promotion groups evidence by hashed project identity. By default, jinhua uses the git remote when available, then falls back to the project root path.

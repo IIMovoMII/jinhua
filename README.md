@@ -61,6 +61,25 @@ python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" 
 
 `wake-check` 只判断是否应该优先路由到 jinhua，不记录用户原文，也不替你生成经验。真正的记录、聚类和提案仍然从 `cycle` 开始。
 
+Codex / Claude Code 的 `UserPromptSubmit` hook 可以用更标准的适配入口：
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
+```
+
+当前仓库里的共用 hook 壳在 `hooks/claude-codex-hooks.json`。
+
+这个命令从 hook stdin 读取 JSON；命中时只返回一条短的 `additionalContext`，提醒 agent 加载 jinhua 并运行 `cycle`。如果安装时只复制了 Skill 文件，Codex 不会自动冒出 hook trust 提醒；要走信任流程，hook 需要通过插件或 `.codex/` 配置层被加载。
+
+当前仓库已经补齐了插件层文件：
+
+- `.codex-plugin/plugin.json`
+- `.agents/plugins/marketplace.json`
+- `.claude-plugin/plugin.json`
+- `.claude-plugin/marketplace.json`
+
+这意味着 `jinhua` 现在不只是一个 Skill 仓库，也可以被 Codex / Claude Code 当成真正的插件源来加载 hook。
+
 ## 判断规则
 
 `jinhua` 只记录可复用的方法论信号。能记录的经验，至少要能写成未来的 `trigger`（什么时候用）和 `action`（怎么做）。
@@ -137,7 +156,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> log-signal \
 
 这段命令里的英文参数是 CLI 接口名。常用参数可以这样理解：
 
-- `--source-type`：信号来源，比如用户纠正（user_correction）或成功经验（success_trace）。
+- `--source-type`：信号来源，比如用户纠正（user_correction）、成功经验（success_trace）或失败轨迹（failure_trace）。
 - `--summary`：脱敏后的经验摘要，不要写用户原文。
 - `--operator`：经验类型，例如验证路径（verification_path）。
 - `--cluster-key`：本地聚类键，格式必须是 `operator:short_method_slug`。
@@ -213,6 +232,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
 
 - `cycle`：自动检查点。
 - `wake-check`：只读前置粗筛，判断是否应优先路由到 jinhua。
+- `hook-user-prompt-submit`：Codex / Claude Code 的 `UserPromptSubmit` hook 适配器。
 - `log-signal`：记录方法论信号。
 - `list-clusters`：查看本地聚类。
 - `propose`：创建本地提案。

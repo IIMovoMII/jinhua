@@ -32,6 +32,22 @@ python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" 
 
 支持 hook 的宿主可以在加载完整 Skill 前先用它粗筛。返回 `should_route: true` 时，再路由到 jinhua 并运行 `cycle`；返回 `false` 时，继续当前任务即可。
 
+## UserPromptSubmit hook 适配器
+
+Codex 和 Claude Code 这类 `UserPromptSubmit` hook 可以调用：
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
+```
+
+这个命令从 stdin 读取 hook JSON，支持常见字段：`prompt`、`userPrompt`、`message`、`input.prompt`。测试时可以直接传文本：
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit --text "为什么没触发jinhua.skill？" --pretty
+```
+
+如果命中同一套粗筛规则，它会返回 `continue: true` 和 `hookSpecificOutput.additionalContext`，让宿主把“应该加载 jinhua”这条短提示注入上下文。没命中时只返回 `{"continue": true}`。适配器是只读的，不保存 prompt。
+
 ## 项目身份
 
 全局晋升层需要判断“这条经验是不是跨项目重复出现”。默认身份规则是：

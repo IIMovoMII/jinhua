@@ -1,0 +1,10 @@
+{
+  "name": "jinhua",
+  "version": "1.0.0",
+  "description": "Workflow memory and Skill evolution for coding agents.",
+  "author": {
+    "name": "IIMovoMII",
+    "url": "https://github.com/IIMovoMII"
+  },
+  "hooks": "./hooks/claude-codex-hooks.json"
+}

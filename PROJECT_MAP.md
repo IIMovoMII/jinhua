@@ -31,6 +31,19 @@ jinhua/
 |   |   |-- feature_request.yml
 |   |   `-- config.yml
 |   `-- PULL_REQUEST_TEMPLATE.md
+|-- .agents/
+|   `-- plugins/
+|       `-- marketplace.json
+|-- .claude-plugin/
+|   |-- marketplace.json
+|   `-- plugin.json
+|-- .codex-plugin/
+|   `-- plugin.json
+|-- hooks/
+|   `-- claude-codex-hooks.json
+|-- skills/
+|   `-- jinhua/
+|       `-- SKILL.md
 |-- scripts/
 |   |-- jinhua.py
 |   `-- test_wake_check.py
@@ -70,6 +83,7 @@ jinhua/global-data/
 - `init`
 - `cycle`
 - `wake-check`
+- `hook-user-prompt-submit`
 - `log-signal`
 - `list-clusters`
 - `propose`
@@ -105,3 +119,5 @@ The public CLI surface is intentionally focused on the closed loop above.
 - Do not auto-create project rule files when `project_rule` is the recommended placement.
 - Do not add daemon, database, vector store, dashboard, or ML core loop.
 - Do not add broad observation commands as first-class workflow.
+- Do not make the skill itself own hook packaging; keep hook config in the thin plugin layer.
+- Keep repo-local plugin metadata thin: marketplace files route discovery, `.codex-plugin/plugin.json` exposes hooks and skills, and the canonical methodology logic stays in the root `SKILL.md`.
