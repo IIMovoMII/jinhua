@@ -162,46 +162,102 @@ OUTPUT_STATES = {
 }
 OUTPUT_VISIBILITIES = {"silent", "notify", "ask_confirmation"}
 
-STRONG_CORRECTION_PATTERNS = [
-    r"你(?:又)?错了",
-    r"这(?:个)?不对",
-    r"完全不对",
-    r"不是这样",
-    r"你(?:没|沒有|没有)(?:懂|看懂|明白)",
-    r"你理解错了",
-    r"你搞错(?:重点)?了",
-    r"你(?:又)?跑偏了",
-    r"这不是(?:我)?(?:的)?意思",
-    r"我(?:说的)?不是这个",
-    r"我说的不是",
-    r"这不是我要的",
-    r"重新看我的要求",
-    r"我(?:已经|已經|前面|刚才|剛才)说(?:过|了)",
-    r"按我(?:刚才|剛才)?说的来",
-    r"别自己发挥",
-    r"不要写代码",
-    r"我要的是.*不是.*代码",
-    r"我要的是方案",
-    r"我要中文|别用英文|不要.*英文",
-    r"(?:你|刚才|剛才|前面|我说的).*(?:不要列表|不要这么啰嗦|废话)",
-    r"不要讲最小方案|直接给最佳方案",
-    r"我问的不是这个",
-    r"不要(?:改|动|動).*(?:skill|内核|內核|核心流程|现有逻辑|現有邏輯)",
-    r"不是让你改.*(?:skill|内核|內核|核心流程)",
-    r"只改.*(?:触发|觸發|唤醒|喚醒)",
-    r"你改错地方了",
-    r"不要重构|不要重構",
-    r"你把范围扩大了",
-    r"操你妈|傻逼|离谱|胡说|瞎说|扯淡|别扯|乱讲",
-    r"\bwrong\b",
-    r"\bincorrect\b",
-    r"\bnot what i meant\b",
-    r"\byou misunderstood\b",
-    r"\bthat's not what i asked\b",
-    r"\bread again\b",
-    r"\byou missed the point\b",
-    r"\bthat's not the scope\b",
+CORRECTION_RULES = [
+    ("direct_denial", 3, [
+        r"你(?:又)?错了",
+        r"这(?:个)?不对",
+        r"完全不对",
+        r"不是这样",
+        r"这不是我要的",
+        r"不是这个",
+        r"不符合(?:我的)?要求",
+        r"你(?:又)?搞错了",
+        r"\bwrong\b",
+        r"\bincorrect\b",
+        r"\bnot this\b",
+    ]),
+    ("misunderstanding", 3, [
+        r"你(?:没|沒有|没有)(?:懂|看懂|明白|理解)",
+        r"你理解错了",
+        r"你搞错(?:重点)?了",
+        r"你(?:又)?跑偏了",
+        r"这不是(?:我)?(?:的)?意思",
+        r"我(?:说的)?不是这个",
+        r"我说的不是",
+        r"你没抓住重点",
+        r"重点不是",
+        r"\bnot what i meant\b",
+        r"\byou misunderstood\b",
+        r"\bthat's not what i asked\b",
+        r"\byou missed the point\b",
+    ]),
+    ("missed_requirement", 3, [
+        r"重新看我的要求",
+        r"重新读(?:一下)?我的要求",
+        r"再读(?:一遍|一下)",
+        r"我(?:已经|已經|前面|刚才|剛才)说(?:过|了)",
+        r"按我(?:刚才|剛才|前面)?说的来",
+        r"你(?:又)?没按.*说的",
+        r"你(?:又)?漏(?:看|掉|了)",
+        r"本来(?:就)?应该",
+        r"本来就该",
+        r"不是早就说了",
+        r"别自己发挥",
+        r"\bread again\b",
+        r"\bas i said\b",
+        r"\bi already said\b",
+    ]),
+    ("output_format_correction", 2, [
+        r"不要写代码",
+        r"我要的是.*不是.*代码",
+        r"我要的是方案",
+        r"我要中文|别用英文|不要.*英文",
+        r"(?:你|刚才|剛才|前面|我说的).*(?:不要列表|不要这么啰嗦|废话)",
+        r"不要讲最小方案|直接给最佳方案",
+        r"我问的不是这个",
+        r"不要只(?:解释|說明|说明)",
+        r"直接(?:改|做|执行|生成)",
+        r"\bdon't write code\b",
+        r"\bi asked for.*not code\b",
+    ]),
+    ("scope_boundary", 3, [
+        r"不要(?:改|动|動).*(?:skill|内核|內核|核心流程|现有逻辑|現有邏輯)",
+        r"不是让你改.*(?:skill|内核|內核|核心流程)",
+        r"只改.*(?:触发|觸發|唤醒|喚醒|第一道|hook)",
+        r"你改错地方了",
+        r"不要重构|不要重構",
+        r"你把范围扩大了",
+        r"别(?:扩大|擴大)范围",
+        r"\bthat's not the scope\b",
+        r"\bdon't change.*core\b",
+    ]),
+    ("tool_skill_procedure_miss", 3, [
+        r"为什么.*(没|沒有|没有|未).*(触发|调用|唤醒|启动|啟動|执行|執行|判断|檢查|检查)",
+        r"(应该|應該|本该|本應|需要).*(触发|调用|唤醒|启动|啟動|执行|執行|判断).*(skill|技能|工具|流程|jinhua|hook)",
+        r"(jinhua|skill|hook|工具|流程).*(没|沒有|没有|未).*(触发|调用|唤醒|启动|啟動|执行|執行|判断)",
+        r"agent为什么没(?:有)?(?:自动)?判断",
+        r"本来应该触发",
+        r"应该(?:自动)?判断",
+        r"应该(?:直接|自动)?.*(?:生成提案|创建提案|propose)",
+        r"\bshould have\b.*\b(triggered|called|run|loaded|selected|checked)\b",
+        r"\bwhy.*(?:didn't|not).*\b(trigger|call|run|load|select|check)\b",
+    ]),
+    ("future_rule_request", 3, [
+        r"(以后|下次|今后|往后).*(应该|應該|必须|一定|先|记住|沉淀|写进)",
+        r"(记住|記住|沉淀|沉澱|写进|寫進|保存).*(规则|規則|skill|经验|經驗|流程|方法)",
+        r"把.*(?:沉淀|沉澱|写进|寫進|保存).*(skill|规则|規則|经验|經驗)",
+        r"\b(from now on|next time|going forward)\b.*\b(should|must|always|never)\b",
+        r"\b(remember|crystallize|preserve|save)\b.*\b(skill|rule|method|workflow)\b",
+    ]),
+    ("frustration", 3, [
+        r"操你妈|傻逼|离谱|胡说|瞎说|扯淡|别扯|乱讲",
+        r"你到底有没有看",
+        r"怎么又这样",
+        r"又来了",
+    ]),
 ]
+
+STRONG_CORRECTION_PATTERNS = [pattern for _, weight, patterns in CORRECTION_RULES if weight >= 3 for pattern in patterns]
 
 MEDIUM_CORRECTION_PATTERNS = [
     r"不是",
@@ -566,6 +622,23 @@ def write_json(path: Path, data: dict) -> None:
 
 def regex_hits(patterns: list[str], text: str) -> list[str]:
     return [pattern for pattern in patterns if re.search(pattern, text, flags=re.I)]
+
+
+def correction_evidence(text: str) -> list[dict]:
+    evidence = []
+    for category, weight, patterns in CORRECTION_RULES:
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.I)
+            if match:
+                evidence.append({
+                    "category": category,
+                    "pattern": pattern,
+                    "match": match.group(0),
+                    "weight": weight,
+                    "start": match.start(),
+                    "end": match.end(),
+                })
+    return evidence
 
 
 def read_state(args: argparse.Namespace) -> dict:
@@ -1753,6 +1826,8 @@ def classify_user_correction(text: str) -> dict:
         return {
             "input_state": "none",
             "score": 0,
+            "categories": [],
+            "evidence": [],
             "strong_matches": [],
             "medium_matches": [],
             "context_matches": [],
@@ -1761,15 +1836,20 @@ def classify_user_correction(text: str) -> dict:
             "internal_context": "",
         }
 
-    strong = regex_hits(STRONG_CORRECTION_PATTERNS, normalized)
+    evidence = correction_evidence(normalized)
+    categories = sorted({item["category"] for item in evidence})
+    strong = [item["pattern"] for item in evidence if item["weight"] >= 3]
+    format_only = categories == ["output_format_correction"]
     medium = regex_hits(MEDIUM_CORRECTION_PATTERNS, normalized)
     context = regex_hits(CORRECTION_CONTEXT_PATTERNS, normalized)
     weak = regex_hits(WEAK_CLARIFICATION_PATTERNS, normalized)
 
-    score = len(strong) * 3 + len(medium) + min(len(context), 2)
+    score = sum(item["weight"] for item in evidence) + len(medium) + min(len(context), 2)
     if weak and not strong and not medium:
         state = "none"
-    elif strong or (medium and context) or score >= 3:
+    elif strong and not (format_only and not context and len(evidence) == 1):
+        state = "strong_user_correction"
+    elif (medium and context) or score >= 5:
         state = "strong_user_correction"
     elif medium:
         state = "possible_user_correction"
@@ -1779,6 +1859,8 @@ def classify_user_correction(text: str) -> dict:
     return {
         "input_state": state,
         "score": score,
+        "categories": categories[:8],
+        "evidence": evidence[:8],
         "strong_matches": strong[:5],
         "medium_matches": medium[:5],
         "context_matches": context[:5],

@@ -24,6 +24,14 @@ def test_input_correction_classifier() -> None:
     )
     assert jinhua.classify_user_correction("再详细一点。")["input_state"] in {"none", "possible_user_correction"}
     assert jinhua.classify_user_correction("不要列表，写成一段。")["input_state"] in {"none", "possible_user_correction"}
+    assert jinhua.classify_user_correction("agent为什么没自动判断啊？")["input_state"] == "strong_user_correction"
+    assert jinhua.classify_user_correction("本来应该触发 jinhua.skill。")["input_state"] == "strong_user_correction"
+    assert jinhua.classify_user_correction("不要只解释，应该直接生成提案。")["input_state"] == "strong_user_correction"
+    result = jinhua.classify_user_correction("为什么没有自动触发 hook？")
+    assert result["input_state"] == "strong_user_correction"
+    assert "tool_skill_procedure_miss" in result["categories"]
+    assert jinhua.classify_user_correction("继续。")["input_state"] == "none"
+    assert jinhua.classify_user_correction("帮我润色一下。")["input_state"] == "none"
 
 
 def test_internal_context_stays_short_and_safe() -> None:

@@ -2,6 +2,11 @@
 
 > 本文件是中文更新说明；英文辅助版本见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 2026-06-27 加重本地输入闸门
+
+- `classify-input` 的本地纠错命中改为按语义分类，并返回结构化命中证据。
+- 扩充第一道本地闸门对 Skill、工具、流程漏触发的识别，同时继续避免把普通澄清误判为强触发。
+
 ## 2026-06-27 用户确认门本地化与二次瘦身
 
 - 用户可见确认门改为中文优先展示：`项目规则(project_rule)`、`增强已有 Skill(skill_patch)`、`个人全局 Skill(personal_global_skill)`、`拒绝(No)`、`修订(Revision)`。

@@ -184,6 +184,8 @@ Generate a proposal when one local cluster reaches any trigger:
 - The user explicitly asks to remember, crystallize, write into a Skill, or evolve now.
 - A high-cost failure is reusable and urgent.
 
+If `cycle` prints ready clusters, do not merely explain readiness. Either create the proposal immediately, or state the concrete skip reason.
+
 Use the `cycle` skeleton as a starting point, refine placement, target, patch, and risk, then run:
 
 ```bash

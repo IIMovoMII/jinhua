@@ -177,6 +177,8 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> log-
 - 用户明确要求“记住、沉淀、写进 Skill、现在就进化”。
 - 出现可复用且紧急的高成本失败。
 
+如果 `cycle` 打印出就绪聚类，不要只解释“可以生成提案”。必须立即创建提案，或者明确说明为什么跳过。
+
 以 `cycle` 打印的骨架为起点，补齐落点、目标、改动和风险：
 
 ```bash

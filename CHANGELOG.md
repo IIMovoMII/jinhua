@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-06-27 Heavier Local Input Gate
+
+- Grouped local correction matches by semantic category and returned structured match evidence from `classify-input`.
+- Expanded the fully local first gate for missed Skill/tool/procedure activation cues while keeping ordinary clarification prompts out of strong triggering.
+
 ## 2026-06-27 Localized User Gate And Second Slimming
 
 - Changed user-facing gate labels to Chinese-first display with stable canonical ids: `项目规则(project_rule)`, `增强已有 Skill(skill_patch)`, `个人全局 Skill(personal_global_skill)`, `拒绝(No)`, and `修订(Revision)`.
