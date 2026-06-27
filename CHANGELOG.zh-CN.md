@@ -2,6 +2,15 @@
 
 > 本文件是中文更新说明；英文辅助版本见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 2026-06-27 Codex 三道闸门触发层
+
+- 用 Codex 优先的三道闸门触发层替换旧的 hook-first 唤醒路径：输入侧本地纠错分类、同轮 invocation guard 防重复、输出侧轻状态尾巴解析。
+- 新增 `hooks/codex-hooks.json`，以及 `UserPromptSubmit`、`PostToolUse`、`Stop` 三个很薄的 Codex hook wrapper。
+- 新增触发层 CLI 命令：`classify-input`、`codex-user-prompt-submit`、`codex-post-tool-use`、`codex-stop`、`parse-output-state`、`guard`。
+- `wake-check` 和 `hook-user-prompt-submit` 保留为 legacy 兼容命令，但不再是主触发路径。
+- 核心闭环不变：`cycle`、`log-signal`、聚类、提案、落点阶梯和用户确认门仍然负责 Skill 进化。
+- 新增触发层测试，覆盖纠错分类、内部提示、状态尾巴解析/剥离、调用去重、agent 直接调用、Stop 防循环和旧 hook manifest 清理。
+
 ## 2026-06-25 插件市场包装补齐
 
 - 新增 `.agents/plugins/marketplace.json`，让 Codex 能把 `jinhua` 当成真正插件源发现，而不只是复制进来的 Skill。

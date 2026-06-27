@@ -17,7 +17,7 @@
     "productivity"
   ],
   "skills": "./skills/",
-  "hooks": "./hooks/claude-codex-hooks.json",
+  "hooks": "./hooks/codex-hooks.json",
   "interface": {
     "displayName": "Jinhua",
     "shortDescription": "Turn repeated workflow lessons into gated Skill improvements",
@@ -26,7 +26,7 @@
     "category": "Productivity",
     "capabilities": [
       "Instructions",
-      "Lifecycle hooks"
+      "Codex command hooks"
     ],
     "websiteURL": "https://github.com/IIMovoMII/jinhua",
     "defaultPrompt": [

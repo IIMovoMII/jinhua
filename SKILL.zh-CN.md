@@ -48,33 +48,33 @@
 - 项目经验记录、信号摘要（signal summary）和生成出来的 Skill 文件可以保持英文，除非用户要求中文。
 - 用户确认可以本地化展示，但必须同时保留 `Yes`、`No`、`Revision`，避免误判。选择某个落点，就等价于对这个落点说 `Yes`。
 
-## 自动检查点
+## Codex 触发层
 
-Skill 不能像后台服务一样自己常驻运行。jinhua 所说的“自动”，指的是：只要这个 Skill 被触发，就先跑一次 `cycle`。
+Skill 不能像后台服务一样常驻运行。jinhua 所说的“自动”，指的是：当这个 Skill 被选中时先跑 `cycle`；如果作为 Codex 插件安装，薄触发层可以在完整 Skill 加载前帮助宿主识别“用户可能正在纠错”的回合。
 
-唤醒机制故意保持很轻：宿主 agent 平时只看到 Skill 的元信息（metadata），任务匹配后才加载正文并运行 `cycle`。机器学习不属于核心闭环。
+新的主触发路径是三道闸门：
+
+1. `UserPromptSubmit`：只做本地输入分类，输出 `none`、`possible_user_correction` 或 `strong_user_correction`。它不记录信号、不运行 `cycle`、不创建提案、不改 Skill。
+2. agent 直接调用：用户明确要求沉淀，或 agent 明确看到可复用的工作流、验证标准、工具选择经验时，可以在当前轮直接调用 jinhua。轻量 invocation guard 会防止同一轮重复调用。
+3. `Stop`：可选的输出侧轻状态尾巴解析，只解析 `output_state`、`visibility`、`reason`，并检查 invocation guard。它不绕过 jinhua 原有规则，也不绕过用户确认门。
+
+Codex 插件 hook 配置在 `hooks/codex-hooks.json`，会调用：
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-post-tool-use
+python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-stop
+```
+
+旧的 `wake-check` 和 `hook-user-prompt-submit` 可以为了兼容继续存在，但不再是主触发路径。
+
+当本 Skill 真正被选中时，运行确定性检查点：
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> cycle
 ```
 
-支持前置路由的宿主，可以先运行只读粗筛：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
-```
-
-如果 `wake-check` 返回 `should_route: true`，加载本 Skill 并运行 `cycle`。不要让 `wake-check` 记录信号，也不要让它判断经验是否可迁移；它只是一个便宜的唤醒过滤器。
-
-Codex 和 Claude Code 这类 `UserPromptSubmit` hook 可以直接调用 hook 适配器，不需要自己解析用户文本：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> hook-user-prompt-submit
-```
-
-适配器会从 stdin 读取 hook JSON。只有同一套粗筛规则命中时，它才返回 `hookSpecificOutput.additionalContext`，提醒 agent 加载 jinhua。它必须保持只读：不记录信号、不创建提案、不保存用户原文，也不修改 Skill。
-
-`cycle` 是确定性检查点，会做五件事：
+`cycle` 会做五件事：
 
 1. 缺少 `.jinhua/data/` 时自动初始化。
 2. 汇总当前项目里的信号、聚类和待确认提案。

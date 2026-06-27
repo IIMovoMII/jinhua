@@ -46,30 +46,31 @@ cycle
 
 ## 唤醒机制
 
-`jinhua` 不是后台服务，不会一直监听所有对话。它的自动调用分两步：
+`jinhua` 不是后台服务，不会一直监听所有对话。它的核心闭环仍然从 `cycle` 开始；触发层只负责更稳定地发现“可能该进入 jinhua”的回合。
 
-1. 宿主 agent 平时只看到 `SKILL.md` 里的 `name` 和 `description`，token 成本很低。
-2. 当用户纠正工作流、反复出现同类方法、修复了可迁移失败，或说“记住这个 / 沉淀一下 / 写进 Skill / 所有项目都这样”时，agent 才加载完整 Skill，并先运行 `cycle`。
+Codex 插件主路径是三道闸门：
 
-这意味着：没提到 `jinhua` 也可以被调用，但前提是当前任务真的出现了方法论信号。普通 bug、一次性偏好、本地路径、临时命令不会触发，这是为了少打扰、少耗 token。
+- 第一道：`UserPromptSubmit` 本地判断用户是否在纠错，输出 `none` / `possible_user_correction` / `strong_user_correction`，只注入极短内部提示。
+- 第二道：agent 可以在当前轮直接调用 jinhua；`invocation guard` 只负责防止同一轮重复调用。
+- 第三道：`Stop` 解析极短输出状态尾巴，例如 `output_state: ok` 或 `output_state: jinhua_candidate`，先查 guard，再决定是否提醒 agent 按原规则考虑 jinhua。
 
-如果宿主 agent 支持前置路由，可以先跑只读粗筛：
+三道闸门都不会直接写 `log-signal`、不会生成 proposal、不会改 Skill、不会绕过用户确认门。正常情况下不增加额外 API 调用。
 
-```bash
-python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
+Codex hook 配置在：
+
+```text
+hooks/codex-hooks.json
 ```
 
-`wake-check` 只判断是否应该优先路由到 jinhua，不记录用户原文，也不替你生成经验。真正的记录、聚类和提案仍然从 `cycle` 开始。
-
-Codex / Claude Code 的 `UserPromptSubmit` hook 可以用更标准的适配入口：
+它调用：
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-post-tool-use
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-stop
 ```
 
-当前仓库里的共用 hook 壳在 `hooks/claude-codex-hooks.json`。
-
-这个命令从 hook stdin 读取 JSON；命中时只返回一条短的 `additionalContext`，提醒 agent 加载 jinhua 并运行 `cycle`。如果安装时只复制了 Skill 文件，Codex 不会自动冒出 hook trust 提醒；要走信任流程，hook 需要通过插件或 `.codex/` 配置层被加载。
+旧的 `wake-check` 和 `hook-user-prompt-submit` 仍保留为兼容命令，但不再是推荐主路径。
 
 当前仓库已经补齐了插件层文件：
 
@@ -78,7 +79,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-pr
 - `.claude-plugin/plugin.json`
 - `.claude-plugin/marketplace.json`
 
-这意味着 `jinhua` 现在不只是一个 Skill 仓库，也可以被 Codex / Claude Code 当成真正的插件源来加载 hook。
+这意味着 `jinhua` 不只是一个 Skill 仓库：Codex 可以通过插件层加载 hook；Claude Code 等其他支持 Skill/CLI 的 agent 仍可使用核心闭环，hook 需要按各自平台配置。
 
 ## 判断规则
 
@@ -231,8 +232,14 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
 ## 常用命令
 
 - `cycle`：自动检查点。
-- `wake-check`：只读前置粗筛，判断是否应优先路由到 jinhua。
-- `hook-user-prompt-submit`：Codex / Claude Code 的 `UserPromptSubmit` hook 适配器。
+- `classify-input`：新触发层的本地纠错分类。
+- `codex-user-prompt-submit`：Codex 第一道输入侧 hook 入口。
+- `codex-post-tool-use`：Codex 第二道 invocation guard 入口。
+- `codex-stop`：Codex 第三道输出状态尾巴入口。
+- `parse-output-state`：只读解析并剥离状态尾巴。
+- `guard`：手动检查 invocation guard。
+- `wake-check`：legacy 兼容粗筛，不再是主路径。
+- `hook-user-prompt-submit`：legacy 兼容适配器，不再是主路径。
 - `log-signal`：记录方法论信号。
 - `list-clusters`：查看本地聚类。
 - `propose`：创建本地提案。

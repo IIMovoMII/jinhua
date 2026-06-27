@@ -5,6 +5,5 @@
   "author": {
     "name": "IIMovoMII",
     "url": "https://github.com/IIMovoMII"
-  },
-  "hooks": "./hooks/claude-codex-hooks.json"
+  }
 }

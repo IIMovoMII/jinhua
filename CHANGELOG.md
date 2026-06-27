@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-06-27 Codex Three-Gate Trigger Layer
+
+- Replaced the old hook-first wake path with a Codex-focused three-gate trigger layer: local input correction classification, same-turn invocation guard, and lightweight output-state tail parsing.
+- Added `hooks/codex-hooks.json` plus thin Codex hook wrappers for `UserPromptSubmit`, `PostToolUse`, and `Stop`.
+- Added trigger-layer CLI commands: `classify-input`, `codex-user-prompt-submit`, `codex-post-tool-use`, `codex-stop`, `parse-output-state`, and `guard`.
+- Kept `wake-check` and `hook-user-prompt-submit` as legacy compatibility commands, no longer the primary trigger path.
+- Kept the core loop unchanged: `cycle`, `log-signal`, clustering, proposals, placement ladder, and the user gate still own Skill evolution.
+- Added trigger-layer tests covering correction classification, internal hints, output-state parsing/stripping, invocation guard deduplication, direct agent calls, Stop-loop protection, and old hook manifest cleanup.
+
 ## 2026-06-25 Marketplace-Backed Plugin Packaging
 
 - Added `.agents/plugins/marketplace.json` so Codex can discover `jinhua` as a real plugin source instead of only a copied Skill.

@@ -45,33 +45,33 @@ Keep durable data and executable identifiers stable:
 - Project experience records, signal summaries, and generated Skill files may stay in English unless the user asks otherwise.
 - The user gate may be localized for display, but include the canonical tokens `Yes`, `No`, and `Revision` so the decision is unambiguous. A placement choice counts as `Yes` for that placement.
 
-## Automatic Checkpoint
+## Codex Trigger Layer
 
-A Skill cannot run as a true background daemon. Automatic means: whenever this Skill triggers, run `cycle`.
+A Skill cannot run as a true background daemon. Automatic means: when this Skill is selected, run `cycle`; when installed as a Codex plugin, the thin trigger layer may help the host notice likely correction turns before the full Skill is loaded.
 
-The wake-up mechanism is intentionally small: the host agent sees only this Skill's metadata until a task matches it, then loads this file and runs `cycle`. Machine-learning behavior is not part of the core loop.
+The primary trigger path is three gates:
+
+1. `UserPromptSubmit`: local input classification only. It returns `none`, `possible_user_correction`, or `strong_user_correction`; it never logs signals, runs `cycle`, creates proposals, or edits Skills.
+2. Agent direct call: the agent may call jinhua in the current turn when the user explicitly asks to crystallize a method, or when the agent sees a reusable workflow/verification/tool-choice lesson. A lightweight invocation guard prevents duplicate same-turn jinhua calls.
+3. `Stop`: optional lightweight output-state parsing. It can parse `output_state` / `visibility` / `reason`, check the invocation guard, and avoid duplicate follow-up. It does not bypass the core jinhua rules or user gate.
+
+Codex plugin hook config lives in `hooks/codex-hooks.json` and calls:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-post-tool-use
+python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-stop
+```
+
+The legacy `wake-check` and `hook-user-prompt-submit` commands may remain for compatibility, but they are not the primary trigger path.
+
+When this Skill is actually selected, run the deterministic checkpoint:
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> cycle
 ```
 
-Hosts that support pre-routing may first run the read-only coarse check:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
-```
-
-If `wake-check` returns `should_route: true`, load this Skill and run `cycle`. Do not let `wake-check` log signals or decide transferability; it is only a cheap wake-up filter.
-
-Codex and Claude Code style `UserPromptSubmit` hooks may call the hook adapter instead of manually extracting text:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> hook-user-prompt-submit
-```
-
-The adapter reads hook JSON from stdin and returns `hookSpecificOutput.additionalContext` only when the same coarse wake check matches. It must stay read-only: no signal logging, no proposal creation, no user-text storage, and no Skill edits.
-
-`cycle` is the deterministic checkpoint:
+`cycle` does five things:
 
 1. Initializes `.jinhua/data/` if missing.
 2. Summarizes local signals, clusters, and pending gates.

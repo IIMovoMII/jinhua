@@ -1,135 +1,111 @@
 # Hook And Platform Integration
 
-`jinhua` has two compatible wake-up paths:
+`jinhua` has two compatible entry paths:
 
 1. Standard Skill selection through `SKILL.md` metadata.
-2. Optional `UserPromptSubmit` hook pre-routing when the host agent supports hooks.
+2. Codex plugin command hooks through `hooks/codex-hooks.json`.
 
-The CLI does not run as a daemon. Hooks may route attention, but they must not change the safety model.
+The CLI does not run as a daemon. Hooks only route attention and prevent duplicate same-turn work; they do not judge transferability, write signals, create proposals, or edit Skills.
 
-A Skill repo by itself cannot force hook trust prompts. For other users, the hook definition must live in a Codex-scanned hook layer such as `~/.codex/hooks.json`, `~/.codex/config.toml`, `<repo>/.codex/hooks.json`, `<repo>/.codex/config.toml`, or a plugin's `hooks/hooks.json`.
+## Primary Codex Trigger Layer
 
-This repo now includes the thin plugin packaging for that route:
+The primary hook path is three gates:
 
-- `.agents/plugins/marketplace.json`
-- `.codex-plugin/plugin.json`
-- `.claude-plugin/plugin.json`
+```text
+UserPromptSubmit -> local correction classifier
+PostToolUse      -> invocation guard record
+Stop             -> output-state tail parser
+```
 
-## Cheap Text Check
+`hooks/codex-hooks.json` calls these commands:
 
-For manual pre-selection:
+```bash
+python <jinhua-dir>/hooks/codex_user_prompt_submit.py
+python <jinhua-dir>/hooks/codex_post_tool_use.py
+python <jinhua-dir>/hooks/codex_stop.py
+```
+
+The wrappers delegate to:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py codex-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py codex-post-tool-use
+python <jinhua-dir>/scripts/jinhua.py codex-stop
+```
+
+## Gate 1: Input Classification
+
+`codex-user-prompt-submit` reads hook JSON from stdin, extracts the latest prompt, and classifies it as:
+
+- `none`
+- `possible_user_correction`
+- `strong_user_correction`
+
+On a match, it emits only a short `hookSpecificOutput.additionalContext`. It never runs `cycle`, writes `signals.jsonl`, creates proposals, stores user text, or edits Skills.
+
+Manual check:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py classify-input --text "you misunderstood, that's not the scope" --json
+```
+
+## Gate 2: Invocation Guard
+
+`codex-post-tool-use` watches tool payloads for jinhua CLI entries such as `cycle`, `log-signal`, `propose`, `global-cycle`, or `global-propose`.
+
+It records only lightweight runtime guard state under:
+
+```text
+.jinhua/runtime/invocation-guard.json
+```
+
+This is not an experience ledger. It is only a duplicate guard for the current session/turn/reason.
+
+Guard decisions:
+
+- `allow`
+- `already_handled`
+- `merge_context_only`
+- `skip_duplicate`
+- `block_loop`
+
+## Gate 3: Output-State Tail
+
+`codex-stop` parses a tiny final-state tail:
+
+```text
+output_state: ok
+visibility: silent
+```
+
+Allowed `output_state` values:
+
+- `ok`
+- `user_correction_handled`
+- `self_issue_detected`
+- `uncertain`
+- `jinhua_candidate`
+
+Allowed `visibility` values:
+
+- `silent`
+- `notify`
+- `ask_confirmation`
+
+If `output_state = jinhua_candidate`, the Stop gate checks the invocation guard first. If jinhua already ran in the same turn, it skips duplicate triggering. If not, it may add a short reminder to consider the existing `cycle` / `log-signal` / `propose` flow. It must not bypass the user gate.
+
+Codex hooks may not perfectly hide already-generated text in every host. This implementation parses and strips where the host supports it; absolute hiding requires an outer wrapper.
+
+## Legacy Compatibility
+
+These commands remain for older installations but are not the primary trigger path:
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
-```
-
-`wake-check` is read-only. It does not run `cycle`, log signals, store user text, or make methodology judgments. It only detects coarse meta-workflow cues such as missed Skill activation, workflow correction, verification-standard correction, tool-choice correction, or requests to preserve a method.
-
-## UserPromptSubmit Adapter
-
-For Codex / Claude Code style hooks:
-
-```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
 ```
 
-The adapter reads the hook JSON payload from stdin and extracts common prompt fields:
-
-- `prompt`
-- `userPrompt`
-- `message`
-- `input.prompt`
-
-If `--project-root` is not supplied and the hook payload contains `cwd`, the adapter uses `cwd` in the follow-up `cycle` hint.
-
-If the prompt matches the same coarse wake check, the adapter returns:
-
-```json
-{
-  "continue": true,
-  "hookSpecificOutput": {
-    "hookEventName": "UserPromptSubmit",
-    "additionalContext": "..."
-  }
-}
-```
-
-If it does not match, it returns only:
-
-```json
-{"continue": true}
-```
-
-This keeps hook cost low: every prompt can run a small regex check, but the full Skill only loads when the host agent sees the additional context and routes to `jinhua`.
-
-## Codex
-
-Codex Skills are discovered through `SKILL.md` with YAML frontmatter `name` and `description`. This is the primary compatibility path.
-
-If the Codex environment supports and runs hooks, configure `UserPromptSubmit` to call `hook-user-prompt-submit`. Some Codex environments may not execute local hooks, or may require separate trusted-project configuration; in that case, the Skill still works through normal Skill selection.
-
-Minimal `hooks.json` shape:
-
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"<jinhua-dir>/scripts/jinhua.py\" hook-user-prompt-submit",
-            "timeout": 5,
-            "statusMessage": "Checking jinhua wake-up"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Do not rely on a matcher for `UserPromptSubmit`; Codex currently ignores matchers for that event. Let the adapter do the cheap filtering.
-
-When `jinhua` is actually selected, it should run:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
-```
-
-Hook runners that need a hard pending-gate signal may call:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle --json --fail-on-pending-gate
-```
-
-Exit code `2` means at least one local or global user gate is pending and must be surfaced before continuing the jinhua branch.
-
-## Claude Code
-
-Claude Code can use the same `UserPromptSubmit` adapter. The hook command should receive the platform hook JSON on stdin and return the adapter JSON on stdout.
-
-Minimal `settings.json` shape:
-
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"<jinhua-dir>/scripts/jinhua.py\" hook-user-prompt-submit",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Use `hook-user-prompt-submit` for every prompt if needed; do not run full `cycle` on every prompt. Let the adapter add context only when a coarse methodology cue is present, then let the selected Skill run `cycle`.
+`hooks/claude-codex-hooks.json` is deprecated and points to `hooks/codex-hooks.json`.
 
 ## Safety Rules
 

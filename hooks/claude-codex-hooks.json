@@ -1,4 +1,6 @@
 {
+  "deprecated": true,
+  "replacement": "hooks/codex-hooks.json",
   "hooks": {
     "UserPromptSubmit": [
       {

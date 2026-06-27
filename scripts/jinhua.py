@@ -121,6 +121,96 @@ GLOBAL_FAST_PROJECT_THRESHOLD = 2
 GLOBAL_FAST_STRENGTH_THRESHOLD = 6
 DEFAULT_RUNTIME_DIR_NAME = ".jinhua"
 
+OUTPUT_STATES = {
+    "ok",
+    "user_correction_handled",
+    "self_issue_detected",
+    "uncertain",
+    "jinhua_candidate",
+}
+OUTPUT_VISIBILITIES = {"silent", "notify", "ask_confirmation"}
+
+STRONG_CORRECTION_PATTERNS = [
+    r"你(?:又)?错了",
+    r"这(?:个)?不对",
+    r"完全不对",
+    r"不是这样",
+    r"你(?:没|沒有|没有)(?:懂|看懂|明白)",
+    r"你理解错了",
+    r"你搞错(?:重点)?了",
+    r"你(?:又)?跑偏了",
+    r"这不是(?:我)?(?:的)?意思",
+    r"我(?:说的)?不是这个",
+    r"我说的不是",
+    r"这不是我要的",
+    r"重新看我的要求",
+    r"我(?:已经|已經|前面|刚才|剛才)说(?:过|了)",
+    r"按我(?:刚才|剛才)?说的来",
+    r"别自己发挥",
+    r"不要写代码",
+    r"我要的是.*不是.*代码",
+    r"我要的是方案",
+    r"我要中文|别用英文|不要.*英文",
+    r"(?:你|刚才|剛才|前面|我说的).*(?:不要列表|不要这么啰嗦|废话)",
+    r"不要讲最小方案|直接给最佳方案",
+    r"我问的不是这个",
+    r"不要(?:改|动|動).*(?:skill|内核|內核|核心流程|现有逻辑|現有邏輯)",
+    r"不是让你改.*(?:skill|内核|內核|核心流程)",
+    r"只改.*(?:触发|觸發|唤醒|喚醒)",
+    r"你改错地方了",
+    r"不要重构|不要重構",
+    r"你把范围扩大了",
+    r"操你妈|傻逼|离谱|胡说|瞎说|扯淡|别扯|乱讲",
+    r"\bwrong\b",
+    r"\bincorrect\b",
+    r"\bnot what i meant\b",
+    r"\byou misunderstood\b",
+    r"\bthat's not what i asked\b",
+    r"\bread again\b",
+    r"\byou missed the point\b",
+    r"\bthat's not the scope\b",
+]
+
+MEDIUM_CORRECTION_PATTERNS = [
+    r"不是",
+    r"不对|不對",
+    r"错了|錯了",
+    r"重新说",
+    r"看清楚",
+    r"我说的是",
+    r"别这样",
+    r"不要",
+    r"只要",
+    r"\bno\b",
+    r"\bnot this\b",
+    r"\bdon't do that\b",
+    r"\bi said\b",
+    r"\bas i said\b",
+]
+
+CORRECTION_CONTEXT_PATTERNS = [
+    r"你",
+    r"刚才|剛才|前面|上一轮|上一輪",
+    r"我说的|我已(?:经|經)说过",
+    r"不是这个",
+    r"改错|跑偏",
+    r"workflow|verification|reasoning|scope|skill|tool",
+]
+
+WEAK_CLARIFICATION_PATTERNS = [
+    r"再详细一点",
+    r"换个说法",
+    r"继续",
+    r"举例",
+    r"能不能更短",
+    r"能不能更正式",
+    r"帮我润色",
+    r"\bmore detail\b",
+    r"\bcontinue\b",
+    r"\bgive examples?\b",
+    r"\bshorter\b",
+]
+
 WAKE_POSITIVE_PATTERNS = [
     r"\bjinhua(?:\.skill)?\b",
     r"\b(skill|tool|procedure|workflow|verification|reasoning|methodology)\b.*\b(trigger|wake|activate|route|call|load|select|missed|should have)\b",
@@ -324,6 +414,14 @@ def runtime_root(args: argparse.Namespace) -> Path:
 
 def data_dir(args: argparse.Namespace) -> Path:
     return runtime_root(args) / "data"
+
+
+def runtime_meta_dir(args: argparse.Namespace) -> Path:
+    return runtime_root(args) / "runtime"
+
+
+def invocation_guard_path(args: argparse.Namespace) -> Path:
+    return runtime_meta_dir(args) / "invocation-guard.json"
 
 
 def global_runtime_root(args: argparse.Namespace | None = None) -> Path:
@@ -1589,7 +1687,11 @@ def wake_check_result(text: str) -> dict:
     normalized = " ".join(str(text or "").strip().split()).lower()
     positive = regex_hits(WAKE_POSITIVE_PATTERNS, normalized)
     negative = regex_hits(WAKE_NEGATIVE_PATTERNS, normalized)
-    should_route = bool(positive) and not (negative and len(positive) == 1 and "jinhua" not in normalized)
+    classification = classify_user_correction(text)
+    should_route = (
+        classification["input_state"] == "strong_user_correction"
+        or (bool(positive) and not (negative and len(positive) == 1 and "jinhua" not in normalized))
+    )
     if should_route:
         reason = "meta-workflow correction or Skill-evolution cue"
     elif negative:
@@ -1597,15 +1699,75 @@ def wake_check_result(text: str) -> dict:
     else:
         reason = "no reusable workflow cue"
     return {
+        "legacy": True,
         "should_route": should_route,
         "reason": reason,
+        "input_state": classification["input_state"],
         "positive_matches": positive[:3],
         "negative_matches": negative[:3],
         "next_command": "cycle" if should_route else "",
     }
 
 
+def classify_user_correction(text: str) -> dict:
+    normalized = " ".join(str(text or "").strip().split()).lower()
+    if not normalized:
+        return {
+            "input_state": "none",
+            "score": 0,
+            "strong_matches": [],
+            "medium_matches": [],
+            "context_matches": [],
+            "weak_matches": [],
+            "trigger_intent": "",
+            "internal_context": "",
+        }
+
+    strong = regex_hits(STRONG_CORRECTION_PATTERNS, normalized)
+    medium = regex_hits(MEDIUM_CORRECTION_PATTERNS, normalized)
+    context = regex_hits(CORRECTION_CONTEXT_PATTERNS, normalized)
+    weak = regex_hits(WEAK_CLARIFICATION_PATTERNS, normalized)
+
+    score = len(strong) * 3 + len(medium) + min(len(context), 2)
+    if weak and not strong and not medium:
+        state = "none"
+    elif strong or (medium and context) or score >= 3:
+        state = "strong_user_correction"
+    elif medium:
+        state = "possible_user_correction"
+    else:
+        state = "none"
+
+    return {
+        "input_state": state,
+        "score": score,
+        "strong_matches": strong[:5],
+        "medium_matches": medium[:5],
+        "context_matches": context[:5],
+        "weak_matches": weak[:5],
+        "trigger_intent": "user_correction" if state != "none" else "",
+        "internal_context": input_internal_context(state),
+    }
+
+
+def input_internal_context(input_state: str) -> str:
+    if input_state == "strong_user_correction":
+        return (
+            "User may be correcting the previous answer. Prioritize fixing the mismatch, "
+            "do not explain internal state, and only consider jinhua if the correction exposes "
+            "a reusable trigger plus action under the existing rules."
+        )
+    if input_state == "possible_user_correction":
+        return (
+            "User may be clarifying or narrowing the previous request. Align to the current "
+            "boundary and avoid expanding scope."
+        )
+    return ""
+
+
 def command_wake_check(args: argparse.Namespace) -> None:
+    if not args.json:
+        print("warning: wake-check is legacy; use classify-input or Codex trigger hooks for the primary path.")
     if args.text:
         text = args.text
     else:
@@ -1689,11 +1851,317 @@ def user_prompt_submit_hook_output(payload: dict, args: argparse.Namespace | Non
 
 
 def command_hook_user_prompt_submit(args: argparse.Namespace) -> None:
+    print(
+        "warning: hook-user-prompt-submit is legacy; use codex-user-prompt-submit for the primary trigger layer.",
+        file=sys.stderr,
+    )
     if args.text:
         payload = {"hook_event_name": "UserPromptSubmit", "prompt": args.text}
     else:
         payload = read_hook_payload(sys.stdin.read())
     output = user_prompt_submit_hook_output(payload, args)
+    print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
+
+
+def apply_payload_project_root(args: argparse.Namespace, payload: dict) -> None:
+    if str(getattr(args, "project_root", ".")).strip() in {"", "."}:
+        args.project_root = str(hook_project_root(payload, args))
+
+
+def command_classify_input(args: argparse.Namespace) -> None:
+    text = args.text if args.text else sys.stdin.read()
+    result = classify_user_correction(text)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"input_state: {result['input_state']}")
+        if result["trigger_intent"]:
+            print(f"trigger_intent: {result['trigger_intent']}")
+        if result["internal_context"]:
+            print(f"internal_context: {result['internal_context']}")
+
+
+def codex_user_prompt_submit_output(payload: dict, args: argparse.Namespace | None = None) -> dict:
+    prompt = extract_hook_prompt(payload)
+    result = classify_user_correction(prompt)
+    output: dict = {"continue": True, "jinhua": {"input_state": result["input_state"]}}
+    if result["input_state"] == "none":
+        return output
+    output["hookSpecificOutput"] = {
+        "hookEventName": "UserPromptSubmit",
+        "additionalContext": result["internal_context"],
+    }
+    if result["input_state"] == "strong_user_correction":
+        output["jinhua"]["trigger_intent"] = "user_correction"
+    return output
+
+
+def command_codex_user_prompt_submit(args: argparse.Namespace) -> None:
+    if args.text:
+        payload = {"hook_event_name": "UserPromptSubmit", "prompt": args.text}
+    else:
+        payload = read_hook_payload(sys.stdin.read())
+    apply_payload_project_root(args, payload)
+    output = codex_user_prompt_submit_output(payload, args)
+    print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
+
+
+def compact_json_text(value: object) -> str:
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    except TypeError:
+        return str(value)
+
+
+def extract_first_string(payload: object, keys: set[str]) -> str:
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key in keys and isinstance(value, str) and value.strip():
+                return value.strip()
+        for value in payload.values():
+            found = extract_first_string(value, keys)
+            if found:
+                return found
+    elif isinstance(payload, list):
+        for value in payload:
+            found = extract_first_string(value, keys)
+            if found:
+                return found
+    return ""
+
+
+def hook_session_id(payload: dict) -> str:
+    found = extract_first_string(payload, {"session_id", "sessionId", "conversation_id", "conversationId"})
+    if found:
+        return method_hash(found)
+    cwd = payload.get("cwd")
+    return method_hash(str(cwd or "default-session"))
+
+
+def hook_turn_id(payload: dict) -> str:
+    found = extract_first_string(payload, {"turn_id", "turnId", "message_id", "messageId", "request_id", "requestId"})
+    if found:
+        return method_hash(found)
+    prompt = extract_hook_prompt(payload)
+    if prompt:
+        return method_hash(prompt)
+    return datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
+
+
+def jinhua_entry_from_payload(payload: dict) -> str:
+    text = compact_json_text(payload).lower()
+    commands = [
+        "log-signal",
+        "global-propose",
+        "global-cycle",
+        "propose",
+        "cycle",
+        "apply-proposal",
+        "global-apply",
+        "reject-proposal",
+        "global-reject",
+    ]
+    if "jinhua.py" not in text and "scripts/jinhua" not in text:
+        return ""
+    for command in commands:
+        if re.search(rf"(^|[\s\"']){re.escape(command)}($|[\s\"'])", text):
+            return command
+    return "jinhua.py"
+
+
+def default_guard_state() -> dict:
+    return {"schema": 1, "events": [], "stop_tickets": []}
+
+
+def read_guard_state(args: argparse.Namespace) -> dict:
+    state = read_json(invocation_guard_path(args), default_guard_state())
+    if not isinstance(state.get("events"), list):
+        state["events"] = []
+    if not isinstance(state.get("stop_tickets"), list):
+        state["stop_tickets"] = []
+    return state
+
+
+def write_guard_state(args: argparse.Namespace, state: dict) -> None:
+    runtime_meta_dir(args).mkdir(parents=True, exist_ok=True)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    events = []
+    for event in state.get("events", []):
+        timestamp = parse_utc(event.get("timestamp", ""))
+        if timestamp is None or timestamp >= cutoff:
+            events.append(event)
+    state["events"] = events[-100:]
+    state["stop_tickets"] = list(dict.fromkeys(state.get("stop_tickets", [])))[-100:]
+    write_json(invocation_guard_path(args), state)
+
+
+def guard_reason_digest(reason: str) -> str:
+    return method_hash(" ".join(str(reason or "").split()).lower()) if reason else ""
+
+
+def invocation_guard(args: argparse.Namespace, session_id: str, turn_id: str, source: str, reason: str, entry: str = "", mark: bool = False) -> dict:
+    state = read_guard_state(args)
+    reason_digest = guard_reason_digest(reason)
+    same_turn = [
+        event for event in state.get("events", [])
+        if event.get("session_id") == session_id and event.get("turn_id") == turn_id
+    ]
+    same_reason = [event for event in same_turn if event.get("reason_digest") == reason_digest or not reason_digest]
+    if source == "stop" and same_turn:
+        decision = "already_handled"
+    elif len(same_turn) >= 3:
+        decision = "block_loop"
+    elif same_reason:
+        decision = "already_handled" if source == "stop" else "skip_duplicate"
+    else:
+        decision = "allow"
+
+    if mark and decision == "allow":
+        state.setdefault("events", []).append({
+            "timestamp": utc_now(),
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "source": source,
+            "reason_digest": reason_digest,
+            "entry": entry,
+        })
+        write_guard_state(args, state)
+
+    return {
+        "decision": decision,
+        "session_id": session_id,
+        "turn_id": turn_id,
+        "entry": entry,
+        "reason_digest": reason_digest,
+    }
+
+
+def command_guard(args: argparse.Namespace) -> None:
+    result = invocation_guard(
+        args,
+        args.session_id or "manual",
+        args.turn_id or datetime.now(timezone.utc).strftime("%Y%m%d%H%M"),
+        args.source,
+        args.reason,
+        args.entry,
+        args.mark,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2 if args.pretty else None))
+
+
+def codex_post_tool_use_output(payload: dict, args: argparse.Namespace) -> dict:
+    entry = jinhua_entry_from_payload(payload)
+    output: dict = {"continue": True}
+    if not entry:
+        return output
+    session_id = hook_session_id(payload)
+    turn_id = hook_turn_id(payload)
+    reason = extract_hook_prompt(payload) or entry
+    guard = invocation_guard(args, session_id, turn_id, "post_tool_use", reason, entry, mark=True)
+    output["jinhua"] = {"invocation_guard": guard}
+    return output
+
+
+def command_codex_post_tool_use(args: argparse.Namespace) -> None:
+    payload = read_hook_payload(sys.stdin.read())
+    apply_payload_project_root(args, payload)
+    output = codex_post_tool_use_output(payload, args)
+    print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
+
+
+def extract_assistant_message(payload: dict) -> str:
+    for key in ("last_assistant_message", "assistant_message", "response", "message", "text"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            return value
+    for parent_key in ("output", "payload", "event"):
+        parent = payload.get(parent_key)
+        if isinstance(parent, dict):
+            value = extract_assistant_message(parent)
+            if value:
+                return value
+    return ""
+
+
+def parse_output_state(text: str) -> dict:
+    raw = str(text or "")
+    fields: dict[str, str] = {}
+    pattern = re.compile(r"(?im)^\s*(output_state|visibility|reason)\s*:\s*(.*?)\s*$")
+    matches = list(pattern.finditer(raw))
+    for match in matches[-3:]:
+        fields[match.group(1).lower()] = match.group(2).strip()
+
+    state = fields.get("output_state", "")
+    visibility = fields.get("visibility", "")
+    valid = state in OUTPUT_STATES and visibility in OUTPUT_VISIBILITIES
+
+    stripped = raw
+    if matches:
+        start = matches[-1].start()
+        for match in reversed(matches):
+            if raw[match.end():start].strip() == "":
+                start = match.start()
+            else:
+                break
+        stripped = raw[:start].rstrip()
+
+    return {
+        "valid": valid,
+        "output_state": state if state in OUTPUT_STATES else "",
+        "visibility": visibility if visibility in OUTPUT_VISIBILITIES else "",
+        "reason": fields.get("reason", ""),
+        "user_visible_text": stripped,
+        "had_tail": bool(matches),
+    }
+
+
+def stop_ticket_once(args: argparse.Namespace, session_id: str, turn_id: str) -> bool:
+    state = read_guard_state(args)
+    key = f"{session_id}:{turn_id}"
+    if key in state.get("stop_tickets", []):
+        return False
+    state.setdefault("stop_tickets", []).append(key)
+    write_guard_state(args, state)
+    return True
+
+
+def codex_stop_output(payload: dict, args: argparse.Namespace) -> dict:
+    message = extract_assistant_message(payload)
+    parsed = parse_output_state(message)
+    session_id = hook_session_id(payload)
+    turn_id = hook_turn_id(payload)
+    output: dict = {"continue": True, "jinhua": {"output_state": parsed}}
+
+    if not parsed["had_tail"]:
+        output["jinhua"]["missing_tail_ticketed"] = stop_ticket_once(args, session_id, turn_id)
+        return output
+
+    if parsed["output_state"] != "jinhua_candidate":
+        return output
+
+    guard = invocation_guard(args, session_id, turn_id, "stop", parsed.get("reason", ""), "output_state", mark=False)
+    output["jinhua"]["invocation_guard"] = guard
+    if guard["decision"] == "allow":
+        output["hookSpecificOutput"] = {
+            "hookEventName": "Stop",
+            "additionalContext": (
+                "Output marked jinhua_candidate. If this exposes a reusable trigger plus action, "
+                "use the existing jinhua cycle/log-signal/propose flow; do not bypass the user gate."
+            ),
+        }
+    return output
+
+
+def command_parse_output_state(args: argparse.Namespace) -> None:
+    text = args.text if args.text else sys.stdin.read()
+    result = parse_output_state(text)
+    print(json.dumps(result, ensure_ascii=False, indent=2 if args.pretty else None))
+
+
+def command_codex_stop(args: argparse.Namespace) -> None:
+    payload = read_hook_payload(sys.stdin.read())
+    apply_payload_project_root(args, payload)
+    output = codex_stop_output(payload, args)
     print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
 
 
@@ -2811,7 +3279,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     global_cycle_parser.set_defaults(func=command_global_cycle)
 
-    wake_parser = subparsers.add_parser("wake-check", help="Cheap read-only check for whether jinhua should be routed")
+    classify_parser = subparsers.add_parser("classify-input", help="Classify user correction state for the trigger layer")
+    classify_parser.add_argument("--text", default="", help="User message to classify. Defaults to stdin.")
+    classify_parser.add_argument("--json", action="store_true", help="Emit machine-readable result")
+    classify_parser.set_defaults(func=command_classify_input)
+
+    wake_parser = subparsers.add_parser("wake-check", help="Legacy read-only check; primary trigger path uses classify-input")
     wake_parser.add_argument("--text", default="", help="User message to classify. Defaults to stdin.")
     wake_parser.add_argument("--json", action="store_true", help="Emit machine-readable routing result")
     wake_parser.add_argument("--exit-code", action="store_true", help="Exit 0 when routed, 1 when skipped.")
@@ -2819,11 +3292,48 @@ def build_parser() -> argparse.ArgumentParser:
 
     hook_prompt_parser = subparsers.add_parser(
         "hook-user-prompt-submit",
-        help="Read a UserPromptSubmit hook JSON payload and emit a routing hint",
+        help="Legacy UserPromptSubmit adapter; primary trigger path uses codex-user-prompt-submit",
     )
     hook_prompt_parser.add_argument("--text", default="", help="Prompt text for tests. Defaults to stdin JSON.")
     hook_prompt_parser.add_argument("--pretty", action="store_true", help="Pretty-print hook JSON output.")
     hook_prompt_parser.set_defaults(func=command_hook_user_prompt_submit)
+
+    codex_prompt_parser = subparsers.add_parser(
+        "codex-user-prompt-submit",
+        help="Codex UserPromptSubmit trigger gate: local correction classifier only",
+    )
+    codex_prompt_parser.add_argument("--text", default="", help="Prompt text for tests. Defaults to stdin JSON.")
+    codex_prompt_parser.add_argument("--pretty", action="store_true", help="Pretty-print hook JSON output.")
+    codex_prompt_parser.set_defaults(func=command_codex_user_prompt_submit)
+
+    codex_post_tool_parser = subparsers.add_parser(
+        "codex-post-tool-use",
+        help="Codex PostToolUse trigger gate: record jinhua invocations for duplicate protection",
+    )
+    codex_post_tool_parser.add_argument("--pretty", action="store_true", help="Pretty-print hook JSON output.")
+    codex_post_tool_parser.set_defaults(func=command_codex_post_tool_use)
+
+    codex_stop_parser = subparsers.add_parser(
+        "codex-stop",
+        help="Codex Stop trigger gate: parse lightweight output-state tail",
+    )
+    codex_stop_parser.add_argument("--pretty", action="store_true", help="Pretty-print hook JSON output.")
+    codex_stop_parser.set_defaults(func=command_codex_stop)
+
+    output_state_parser = subparsers.add_parser("parse-output-state", help="Parse and strip a lightweight output-state tail")
+    output_state_parser.add_argument("--text", default="", help="Assistant output text. Defaults to stdin.")
+    output_state_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+    output_state_parser.set_defaults(func=command_parse_output_state)
+
+    guard_parser = subparsers.add_parser("guard", help="Run the jinhua invocation guard")
+    guard_parser.add_argument("--session-id", default="")
+    guard_parser.add_argument("--turn-id", default="")
+    guard_parser.add_argument("--source", default="manual")
+    guard_parser.add_argument("--reason", default="")
+    guard_parser.add_argument("--entry", default="")
+    guard_parser.add_argument("--mark", action="store_true")
+    guard_parser.add_argument("--pretty", action="store_true")
+    guard_parser.set_defaults(func=command_guard)
 
     signal_parser = subparsers.add_parser("log-signal", help="Record a model-detected methodology signal")
     signal_parser.add_argument("--source-type", required=True, choices=SOURCE_TYPES)

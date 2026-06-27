@@ -14,31 +14,37 @@ Use `--json` for machine-readable output. Use `--fail-on-pending-gate` when a ho
 
 Use `--agent-profile` or `JINHUA_AGENT_PROFILE` to tune project-rule file recommendations. Supported profiles are `codex`, `claude`, `copilot`, `trae`, `hermes`, `openclaw`, `workbuddy`, and generic/custom fallback.
 
-## Wake Check
+## Trigger Layer
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py classify-input --text "<latest user message>" --json
+```
+
+`classify-input` is the primary read-only input gate. It returns `none`, `possible_user_correction`, or `strong_user_correction`. It does not run `cycle`, log signals, store user text, or create proposals.
+
+Codex hook entries call:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-post-tool-use
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-stop
+```
+
+Supporting read-only tools:
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py parse-output-state --text "<assistant output>" --pretty
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> guard --session-id s --turn-id t --source manual --reason "..." --mark
+```
+
+`codex-user-prompt-submit` reads hook JSON from stdin and may emit a short `additionalContext`. `codex-post-tool-use` records that jinhua was already entered in this turn. `codex-stop` parses the output-state tail and checks the invocation guard before suggesting any follow-up. None of these commands write `signals.jsonl`, create proposals, or bypass the user gate.
+
+Legacy compatibility commands remain available but are not the primary path:
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
-```
-
-`wake-check` is a read-only pre-routing check. It returns `should_route: true` for coarse meta-workflow cues such as missed Skill activation, workflow correction, verification-standard correction, or requests to preserve a method. It does not run `cycle`, log signals, store user text, or create proposals.
-
-Use it before loading the full Skill in hook-enabled hosts. If it returns `should_route: true`, route to jinhua and run `cycle`; if it returns `false`, continue the task normally.
-
-## UserPromptSubmit Hook Adapter
-
-Codex and Claude Code style `UserPromptSubmit` hooks can call:
-
-```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
 ```
-
-The command reads hook JSON from stdin. It accepts common prompt fields such as `prompt`, `userPrompt`, `message`, and `input.prompt`. For tests, use:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit --text "为什么没触发jinhua.skill？" --pretty
-```
-
-When the prompt matches the same coarse wake check, the command returns a JSON object with `continue: true` and `hookSpecificOutput.additionalContext`. When it does not match, it returns only `{"continue": true}`. The adapter is read-only and does not store the prompt.
 
 ## Project Identity
 

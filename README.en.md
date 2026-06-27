@@ -33,30 +33,31 @@ cycle
 
 ## Wake-Up Mechanism
 
-`jinhua` is not a background daemon. Automatic use has two small layers:
+`jinhua` is not a background daemon. The core loop still starts with `cycle`; the trigger layer only helps the host notice turns that may deserve jinhua.
 
-1. The host agent normally sees only `name` and `description` from `SKILL.md`, so the token cost stays low.
-2. When the task contains a methodology signal, such as a workflow correction, repeated reusable method, transferable fixed failure, or phrases like "remember this", "crystallize this", "write into a Skill", or "apply everywhere", the agent loads the full Skill and runs `cycle` first.
+The Codex plugin path uses three gates:
 
-So jinhua can trigger even when the user does not name it, but only when the current task has a real methodology signal. Ordinary bugs, one-off preferences, local paths, and temporary commands should not wake it.
+- Gate 1: `UserPromptSubmit` locally classifies user correction as `none`, `possible_user_correction`, or `strong_user_correction`, and injects only a tiny internal hint.
+- Gate 2: the agent may directly call jinhua in the current turn; the `invocation guard` only prevents duplicate same-turn calls.
+- Gate 3: `Stop` parses a tiny output-state tail such as `output_state: ok` or `output_state: jinhua_candidate`, checks the guard, and only then may remind the agent to consider the normal jinhua rules.
 
-Hosts with pre-routing support can run the read-only coarse check:
+The trigger layer never writes `log-signal`, creates proposals, edits Skills, or bypasses the user gate. Normal idle use adds no extra model call.
 
-```bash
-python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
+Codex hook config lives at:
+
+```text
+hooks/codex-hooks.json
 ```
 
-`wake-check` only decides whether to prioritize jinhua. It does not store user text, log experience, or create proposals. Real recording, clustering, and proposal work still starts with `cycle`.
-
-Codex / Claude Code `UserPromptSubmit` hooks can use the standard adapter:
+It calls:
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-post-tool-use
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-stop
 ```
 
-The shared hook shell in this repo is `hooks/claude-codex-hooks.json`.
-
-The command reads hook JSON from stdin. On a match, it returns only a short `additionalContext` hint telling the host agent to load jinhua and run `cycle`. If a user only copies the Skill files, Codex will not auto-prompt trust for hooks; the hook has to be loaded through a plugin or `.codex/` config layer to enter the trust flow.
+The old `wake-check` and `hook-user-prompt-submit` commands remain as legacy compatibility entries, but they are no longer the recommended primary path.
 
 This repo now ships the plugin-layer files needed for that trust flow:
 
@@ -65,7 +66,7 @@ This repo now ships the plugin-layer files needed for that trust flow:
 - `.claude-plugin/plugin.json`
 - `.claude-plugin/marketplace.json`
 
-In other words, `jinhua` is no longer just a Skill repo; it can also be loaded as a real Codex / Claude Code plugin source so hooks participate in the normal trust path.
+In other words, `jinhua` is no longer just a Skill repo: Codex can load hooks through the plugin layer; Claude Code and other Skill/CLI-capable agents can still use the core loop, with hooks configured through their own platform conventions.
 
 ## Rules
 
@@ -196,8 +197,14 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
 Primary workflow:
 
 - `cycle`
-- `wake-check`
-- `hook-user-prompt-submit`
+- `classify-input`
+- `codex-user-prompt-submit`
+- `codex-post-tool-use`
+- `codex-stop`
+- `parse-output-state`
+- `guard`
+- `wake-check` (legacy)
+- `hook-user-prompt-submit` (legacy)
 - `log-signal`
 - `list-clusters`
 - `propose`

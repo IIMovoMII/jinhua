@@ -22,31 +22,37 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 
 `--agent-profile` 或环境变量 `JINHUA_AGENT_PROFILE` 可以影响项目规则文件推荐。支持 `codex`、`claude`、`copilot`、`trae`、`hermes`、`openclaw`、`workbuddy`，未知 agent 会走 generic/custom 兜底。
 
-## 唤醒粗筛
+## 触发层命令
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py classify-input --text "<latest user message>" --json
+```
+
+`classify-input` 是新的只读输入侧闸门。它只返回 `none`、`possible_user_correction` 或 `strong_user_correction`，不会运行 `cycle`，不会记录信号，不保存用户原文，也不会创建提案。
+
+Codex hook 会调用：
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-post-tool-use
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-stop
+```
+
+辅助只读命令：
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py parse-output-state --text "<assistant output>" --pretty
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> guard --session-id s --turn-id t --source manual --reason "..." --mark
+```
+
+`codex-user-prompt-submit` 从 stdin 读取 hook JSON，命中时只注入极短 `additionalContext`。`codex-post-tool-use` 记录本轮已经进入过 jinhua，防止重复。`codex-stop` 解析输出状态尾巴，并先查 invocation guard，再决定是否提醒 agent 后续按原规则处理。它们都不会写 `signals.jsonl`，不会创建提案，也不会绕过用户确认门。
+
+旧兼容命令仍可用，但不再是主路径：
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
-```
-
-`wake-check` 是只读的前置路由检查。它会在粗粒度上识别几类元工作流线索：Skill 没触发、流程纠正、验证标准纠正，或用户要求把方法沉淀下来。它不会运行 `cycle`，不会记录信号，不会保存用户原文，也不会创建提案。
-
-支持 hook 的宿主可以在加载完整 Skill 前先用它粗筛。返回 `should_route: true` 时，再路由到 jinhua 并运行 `cycle`；返回 `false` 时，继续当前任务即可。
-
-## UserPromptSubmit hook 适配器
-
-Codex 和 Claude Code 这类 `UserPromptSubmit` hook 可以调用：
-
-```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
 ```
-
-这个命令从 stdin 读取 hook JSON，支持常见字段：`prompt`、`userPrompt`、`message`、`input.prompt`。测试时可以直接传文本：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit --text "为什么没触发jinhua.skill？" --pretty
-```
-
-如果命中同一套粗筛规则，它会返回 `continue: true` 和 `hookSpecificOutput.additionalContext`，让宿主把“应该加载 jinhua”这条短提示注入上下文。没命中时只返回 `{"continue": true}`。适配器是只读的，不保存 prompt。
 
 ## 项目身份
 

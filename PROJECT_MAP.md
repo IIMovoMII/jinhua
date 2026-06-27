@@ -40,13 +40,17 @@ jinhua/
 |-- .codex-plugin/
 |   `-- plugin.json
 |-- hooks/
-|   `-- claude-codex-hooks.json
+|   |-- codex-hooks.json
+|   |-- codex_user_prompt_submit.py
+|   |-- codex_post_tool_use.py
+|   |-- codex_stop.py
+|   `-- claude-codex-hooks.json (legacy)
 |-- skills/
 |   `-- jinhua/
 |       `-- SKILL.md
 |-- scripts/
 |   |-- jinhua.py
-|   `-- test_wake_check.py
+|   `-- test_trigger_layer.py
 |-- references/
 |   |-- cli-usage.md
 |   |-- operator-json-schema.md
@@ -82,6 +86,12 @@ jinhua/global-data/
 
 - `init`
 - `cycle`
+- `classify-input`
+- `codex-user-prompt-submit`
+- `codex-post-tool-use`
+- `codex-stop`
+- `parse-output-state`
+- `guard`
 - `wake-check`
 - `hook-user-prompt-submit`
 - `log-signal`
@@ -99,7 +109,7 @@ jinhua/global-data/
 - `status`
 - `validate`
 
-The public CLI surface is intentionally focused on the closed loop above.
+The public CLI surface is intentionally focused on the closed loop above. `wake-check` and `hook-user-prompt-submit` are legacy compatibility commands; the primary Codex trigger layer uses `classify-input`, `codex-user-prompt-submit`, `codex-post-tool-use`, and `codex-stop`.
 
 ## Data Rules
 
@@ -119,5 +129,5 @@ The public CLI surface is intentionally focused on the closed loop above.
 - Do not auto-create project rule files when `project_rule` is the recommended placement.
 - Do not add daemon, database, vector store, dashboard, or ML core loop.
 - Do not add broad observation commands as first-class workflow.
-- Do not make the skill itself own hook packaging; keep hook config in the thin plugin layer.
-- Keep repo-local plugin metadata thin: marketplace files route discovery, `.codex-plugin/plugin.json` exposes hooks and skills, and the canonical methodology logic stays in the root `SKILL.md`.
+- Do not make hooks own experience logic; they only classify, guard, and parse state tails.
+- Keep repo-local plugin metadata thin: marketplace files route discovery, `.codex-plugin/plugin.json` exposes Codex hooks and skills, and the canonical methodology logic stays in the root `SKILL.md`.
