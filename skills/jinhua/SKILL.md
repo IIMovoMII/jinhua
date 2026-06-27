@@ -1,6 +1,6 @@
 ---
 name: jinhua
-description: Methodology Skill for reusable workflow signals and Skill evolution in Agent Skills-compatible coding agents. Use when user feedback semantically corrects the agent's workflow, verification standard, reasoning direction, tool/Skill choice, missed expected procedure, or Skill-evolution behavior; when work reveals a repeatable method, transferable failure, repeated pattern, Skill-rule gap, or explicit request to preserve a method as a Skill, project rule, AGENTS.md rule, or global practice. Skip one-off content fixes, private facts, ordinary preferences, task-local bugs, and non-transferable details.
+description: Gated Skill evolution for reusable workflow lessons. Use when the user asks to preserve or update a Skill/rule, or when work exposes a transferable method, repeated correction, or missed agent procedure. Skip one-off fixes, preferences, and private facts.
 ---
 
 # jinhua
