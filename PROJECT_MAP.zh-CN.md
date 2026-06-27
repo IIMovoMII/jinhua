@@ -140,4 +140,5 @@ jinhua/global-data/
 - 不要添加后台进程、外部数据库、向量库或仪表盘。
 - 不要把宽泛的观察命令加入主流程。
 - 不要让 hook 承担经验系统；hook 只做分类、防重复和状态尾巴解析。
+- 不要让就绪聚类隐身；hook 可以把它带回注意力，但写提案仍然必须走 `cycle`、`propose` 和用户确认门。
 - 仓库内插件元数据保持很薄：marketplace 文件负责被发现，`.codex-plugin/plugin.json` 暴露 Codex hooks 和 skills，真正的方法论逻辑仍然集中在根目录 `SKILL.md`。

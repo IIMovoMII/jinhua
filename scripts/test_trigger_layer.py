@@ -118,6 +118,65 @@ def test_periodic_stop_is_per_session_and_light() -> None:
         assert "periodic_stop" not in second_stop["jinhua"]
 
 
+def test_ready_attention_surfaces_ready_clusters_without_mutating_ledger() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        args = args_for(Path(tmp))
+        jinhua.initialize_runtime(args, quiet=True)
+        jinhua.write_cluster_state(args, {
+            "schema_version": "2.0",
+            "updated_at": "",
+            "clusters": {
+                "other:ready_example": {
+                    "cluster_key": "other:ready_example",
+                    "operator": "other",
+                    "signal_count": 3,
+                    "strength_sum": 5,
+                    "sample_signal_ids": [],
+                    "last_seen": "",
+                    "status": "ready",
+                    "ready_reason": "signal_count >= 3",
+                }
+            },
+        })
+
+        payload = {"session_id": "s1", "turn_id": "u1", "prompt": "普通问题"}
+        output = jinhua.codex_user_prompt_submit_output(payload, args)
+        context = output["hookSpecificOutput"]["additionalContext"]
+        assert "ready clusters" in context
+        assert "Run cycle" in context
+        assert "create one proposal or state a concrete skip reason" in context
+        assert jinhua.read_jsonl(jinhua.data_dir(args) / "signals.jsonl") == []
+        assert jinhua.read_jsonl(jinhua.data_dir(args) / "proposals.jsonl") == []
+
+
+def test_ready_attention_pending_gate_takes_priority() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        args = args_for(Path(tmp))
+        jinhua.initialize_runtime(args, quiet=True)
+        jinhua.write_cluster_state(args, {
+            "schema_version": "2.0",
+            "updated_at": "",
+            "clusters": {
+                "other:ready_example": {
+                    "cluster_key": "other:ready_example",
+                    "operator": "other",
+                    "status": "ready",
+                }
+            },
+        })
+        jinhua.append_jsonl(jinhua.data_dir(args) / "proposals.jsonl", {
+            "id": "prop_test",
+            "cluster_key": "other:ready_example",
+            "status": "pending_user_gate",
+        })
+
+        payload = {"session_id": "s1", "turn_id": "u1", "prompt": "普通问题"}
+        output = jinhua.codex_user_prompt_submit_output(payload, args)
+        context = output["hookSpecificOutput"]["additionalContext"]
+        assert "pending user gates" in context
+        assert "surface one gate" in context
+
+
 def test_stop_candidate_skips_when_turn_already_called_jinhua() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         args = args_for(Path(tmp))
@@ -162,6 +221,8 @@ if __name__ == "__main__":
     test_agent_direct_call_is_allowed_once()
     test_stop_missing_tail_tickets_once()
     test_periodic_stop_is_per_session_and_light()
+    test_ready_attention_surfaces_ready_clusters_without_mutating_ledger()
+    test_ready_attention_pending_gate_takes_priority()
     test_stop_candidate_skips_when_turn_already_called_jinhua()
     test_legacy_wake_check_is_not_primary_but_still_works()
     test_old_hook_is_not_manifest_primary_path()

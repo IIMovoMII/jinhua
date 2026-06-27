@@ -126,4 +126,5 @@ The public CLI surface is intentionally focused on the closed loop above. `wake-
 - Do not add daemon, database, vector store, or dashboard.
 - Do not add broad observation commands as first-class workflow.
 - Do not make hooks own experience logic; they only classify, guard, and parse state tails.
+- Do not leave ready clusters invisible; hook attention may surface them, but proposal writing still belongs to `cycle` plus `propose` and the user gate.
 - Keep repo-local plugin metadata thin: marketplace files route discovery, `.codex-plugin/plugin.json` exposes Codex hooks and skills, and the canonical methodology logic stays in the root `SKILL.md`.

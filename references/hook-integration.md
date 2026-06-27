@@ -43,6 +43,8 @@ python <jinhua-dir>/scripts/jinhua.py codex-stop
 
 On a match, it emits only a short `hookSpecificOutput.additionalContext`. It never runs `cycle`, writes `signals.jsonl`, creates proposals, stores user text, or edits Skills.
 
+It also performs a read-only ready-attention check against existing runtime JSON/JSONL. If ready clusters or pending user gates exist, it injects a short reminder to run `cycle` and either create one proposal, surface one gate, or state a concrete skip reason. This keeps `ready -> pending_user_gate` closed without a background daemon or extra model call.
+
 Manual check:
 
 ```bash

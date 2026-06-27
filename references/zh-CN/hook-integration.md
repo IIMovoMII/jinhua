@@ -45,6 +45,8 @@ python <jinhua-dir>/scripts/jinhua.py codex-stop
 
 命中时只输出一条很短的 `hookSpecificOutput.additionalContext`。它不会运行 `cycle`，不会写 `signals.jsonl`，不会创建提案，不保存用户原文，也不改 Skill。
 
+它还会只读检查现有运行态 JSON/JSONL。如果已经有就绪聚类或待确认门，它会注入一条很短的提醒：先跑 `cycle`，再创建一个提案、展示一个确认门，或明确说明为什么跳过。这样不用后台服务，也不用额外模型调用，就能把 `就绪 -> 待确认门` 的注意力闭环补上。
+
 手动检查：
 
 ```bash

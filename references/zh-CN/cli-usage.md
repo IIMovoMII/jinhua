@@ -45,7 +45,7 @@ python <jinhua-dir>/scripts/jinhua.py parse-output-state --text "<assistant outp
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> guard --session-id s --turn-id t --source manual --reason "..." --mark
 ```
 
-`codex-user-prompt-submit` 从 stdin 读取 hook JSON，命中时只注入极短 `additionalContext`。`codex-post-tool-use` 记录本轮已经进入过 jinhua，防止重复。`codex-stop` 解析输出状态尾巴，并先查 invocation guard，再决定是否提醒 agent 后续按原规则处理。它们都不会写 `signals.jsonl`，不会创建提案，也不会绕过用户确认门。
+`codex-user-prompt-submit` 从 stdin 读取 hook JSON，命中时只注入极短 `additionalContext`。它还会只读检查已有就绪聚类和待确认门，让未处理的 jinhua 工作进入下一轮提示词。`codex-post-tool-use` 记录本轮已经进入过 jinhua，防止重复。`codex-stop` 解析输出状态尾巴，并先查 invocation guard，再决定是否提醒 agent 后续按原规则处理。它们都不会写 `signals.jsonl`，不会创建提案，也不会绕过用户确认门。
 
 旧兼容命令仍可用，但不再是主路径：
 

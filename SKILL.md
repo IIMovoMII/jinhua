@@ -59,6 +59,8 @@ The primary trigger path is three gates:
 2. Agent direct call: the agent may call jinhua in the current turn when the user explicitly asks to crystallize a method, or when the agent sees a reusable workflow/verification/tool-choice lesson. A lightweight invocation guard prevents duplicate same-turn jinhua calls.
 3. `Stop`: optional lightweight output-state parsing plus a per-conversation fallback every 8 user turns. It can parse `output_state` / `visibility` / `reason`, check the invocation guard, and briefly remind the agent to scan this turn and prior conversation for reusable lessons. It does not bypass the core jinhua rules or user gate.
 
+`UserPromptSubmit` also performs a read-only ready-attention check. If local or global clusters are already `ready`, or if proposals are already waiting at the user gate, it may inject one short reminder to run `cycle` and then either create one proposal, surface one gate, or state a concrete skip reason. This check reads existing JSON/JSONL only; it must not run `cycle`, write `signals.jsonl`, create proposals, or edit Skills.
+
 Codex plugin hook config lives in `hooks/codex-hooks.json` and calls:
 
 ```bash

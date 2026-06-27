@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-06-27 Ready Attention Bridge
+
+- Added a read-only ready-attention check to `codex-user-prompt-submit`.
+- If local/global ready clusters or pending user gates already exist, the next prompt gets a tiny reminder to run `cycle` and either create one proposal, surface one gate, or state a concrete skip reason.
+- The bridge does not run `cycle`, write signals, create proposals, edit Skills, or bypass the user gate.
+
 ## 2026-06-27 Heavier Local Input Gate
 
 - Grouped local correction matches by semantic category and returned structured match evidence from `classify-input`.

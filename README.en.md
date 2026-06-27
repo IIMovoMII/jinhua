@@ -41,6 +41,8 @@ The Codex plugin path uses three gates:
 - Gate 2: the agent may directly call jinhua in the current turn; the `invocation guard` only prevents duplicate same-turn calls.
 - Gate 3: `Stop` parses a tiny output-state tail such as `output_state: ok` or `output_state: jinhua_candidate`, checks the guard, and only then may remind the agent to consider the normal jinhua rules.
 
+Gate 1 also reads existing runtime state locally. If ready clusters or pending user gates exist, it injects one short next-turn reminder: run `cycle`, then create one proposal or state a concrete skip reason. This is a read-only JSON/JSONL check; it does not run `cycle`, log signals, or create proposals.
+
 Gate 3 also keeps a per-conversation counter and, every 8 user turns, performs one silent fallback reminder to scan this turn and prior conversation for reusable lessons.
 
 The trigger layer never writes `log-signal`, creates proposals, edits Skills, or bypasses the user gate. Normal idle use adds no extra model call.

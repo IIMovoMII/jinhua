@@ -37,7 +37,7 @@ python <jinhua-dir>/scripts/jinhua.py parse-output-state --text "<assistant outp
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> guard --session-id s --turn-id t --source manual --reason "..." --mark
 ```
 
-`codex-user-prompt-submit` reads hook JSON from stdin and may emit a short `additionalContext`. `codex-post-tool-use` records that jinhua was already entered in this turn. `codex-stop` parses the output-state tail and checks the invocation guard before suggesting any follow-up. None of these commands write `signals.jsonl`, create proposals, or bypass the user gate.
+`codex-user-prompt-submit` reads hook JSON from stdin and may emit a short `additionalContext`. It also reads existing ready clusters and pending user gates so unresolved jinhua work is carried into the next prompt. `codex-post-tool-use` records that jinhua was already entered in this turn. `codex-stop` parses the output-state tail and checks the invocation guard before suggesting any follow-up. None of these commands write `signals.jsonl`, create proposals, or bypass the user gate.
 
 Legacy compatibility commands remain available but are not the primary path:
 

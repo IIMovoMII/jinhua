@@ -1886,6 +1886,10 @@ def input_internal_context(input_state: str) -> str:
     return ""
 
 
+def join_contexts(*parts: str) -> str:
+    return " ".join(part.strip() for part in parts if part and part.strip())
+
+
 def command_wake_check(args: argparse.Namespace) -> None:
     if not args.json:
         print("warning: wake-check is legacy; use classify-input or Codex trigger hooks for the primary path.")
@@ -2002,18 +2006,73 @@ def command_classify_input(args: argparse.Namespace) -> None:
             print(f"internal_context: {result['internal_context']}")
 
 
+def ready_attention_counts(args: argparse.Namespace) -> dict:
+    local_ready = local_pending = global_ready = global_pending = 0
+    if runtime_exists(args):
+        clusters = read_cluster_state(args).get("clusters", {})
+        proposals = read_jsonl(data_dir(args) / "proposals.jsonl")
+        local_ready = sum(1 for cluster in clusters.values() if cluster.get("status") == "ready")
+        local_pending = sum(1 for proposal in proposals if proposal.get("status") in {"pending_user_gate", "needs_revision"})
+    if global_runtime_exists(args):
+        clusters = read_global_clusters(args).get("clusters", {})
+        proposals = read_jsonl(global_proposal_path(args))
+        global_ready = sum(1 for cluster in clusters.values() if cluster.get("status") == "ready")
+        global_pending = sum(1 for proposal in proposals if proposal.get("status") in {"pending_user_gate", "needs_revision"})
+    return {
+        "local_ready": local_ready,
+        "local_pending": local_pending,
+        "global_ready": global_ready,
+        "global_pending": global_pending,
+    }
+
+
+def ready_attention_context(args: argparse.Namespace, session_id: str, turn_state: dict) -> dict:
+    counts = ready_attention_counts(args)
+    pending = counts["local_pending"] + counts["global_pending"]
+    ready = counts["local_ready"] + counts["global_ready"]
+    result = {
+        **counts,
+        "session_id": session_id,
+        "turn_count": int(turn_state.get("turn_count", 0) or 0),
+        "additional_context": "",
+    }
+    if pending:
+        result["additional_context"] = (
+            f"jinhua has pending user gates (local {counts['local_pending']}, global {counts['global_pending']}). "
+            "Run cycle and surface one gate before new jinhua work."
+        )
+    elif ready:
+        result["additional_context"] = (
+            f"jinhua has ready clusters (local {counts['local_ready']}, global {counts['global_ready']}). "
+            "Run cycle, then create one proposal or state a concrete skip reason; keep the user gate."
+        )
+    return result
+
+
 def codex_user_prompt_submit_output(payload: dict, args: argparse.Namespace | None = None) -> dict:
     prompt = extract_hook_prompt(payload)
     result = classify_user_correction(prompt)
     turn_state = {}
+    ready_attention = {}
     if args is not None:
-        turn_state = record_prompt_turn(args, hook_session_id(payload), hook_turn_id(payload))
-    output: dict = {"continue": True, "jinhua": {"input_state": result["input_state"], "turn_state": turn_state}}
-    if result["input_state"] == "none":
+        session_id = hook_session_id(payload)
+        turn_id = hook_turn_id(payload)
+        turn_state = record_prompt_turn(args, session_id, turn_id)
+        ready_attention = ready_attention_context(args, session_id, turn_state)
+    output: dict = {
+        "continue": True,
+        "jinhua": {
+            "input_state": result["input_state"],
+            "turn_state": turn_state,
+            "ready_attention": ready_attention,
+        },
+    }
+    context = join_contexts(result["internal_context"], ready_attention.get("additional_context", ""))
+    if not context:
         return output
     output["hookSpecificOutput"] = {
         "hookEventName": "UserPromptSubmit",
-        "additionalContext": result["internal_context"],
+        "additionalContext": context,
     }
     if result["input_state"] == "strong_user_correction":
         output["jinhua"]["trigger_intent"] = "user_correction"

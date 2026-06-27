@@ -54,6 +54,8 @@ Codex 插件主路径是三道闸门：
 - 第二道：agent 可以在当前轮直接调用 jinhua；`invocation guard` 只负责防止同一轮重复调用。
 - 第三道：`Stop` 解析极短输出状态尾巴，例如 `output_state: ok` 或 `output_state: jinhua_candidate`，先查 guard，再决定是否提醒 agent 按原规则考虑 jinhua。
 
+第一道还会本地读取现有运行态。如果发现已经有 `就绪` 聚类或 `待确认门`，会把一句极短提醒写进下一轮上下文：先跑 `cycle`，再创建一个提案，或明确说明为什么跳过。这个检查只读本地 JSON/JSONL，不运行 `cycle`，不写信号，不生成提案。
+
 第三道还会按单个对话计数，每 8 轮做一次静默兜底，提醒 agent 极短检查本轮和过往对话是否出现可复用经验；没有候选就不打扰用户。
 
 三道闸门都不会直接写 `log-signal`、不会生成 proposal、不会改 Skill、不会绕过用户确认门。正常情况下不增加额外 API 调用。
