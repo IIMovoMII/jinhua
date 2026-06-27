@@ -96,6 +96,8 @@ visibility: silent
 
 如果 `output_state = jinhua_candidate`，Stop 闸门会先查 invocation guard。本轮已经跑过 jinhua，就跳过重复触发；本轮没跑过，才可能给 agent 一个极短提醒，让它按原有 `cycle` / `log-signal` / `propose` 流程判断。它不能绕过用户确认门。
 
+Stop 闸门还会按单个对话计数。默认每 8 个用户回合做一次静默兜底，只提醒 agent 检查本轮和过往对话是否有可复用经验；没有候选就不进入 jinhua。
+
 Codex hook 不一定能在每个宿主里完美隐藏已经生成的文本。本实现会在宿主支持时尽量解析和剥离；如果需要绝对隐藏，需要更外层 wrapper。
 
 ## 旧兼容入口

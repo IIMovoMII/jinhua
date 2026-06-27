@@ -94,6 +94,8 @@ Allowed `visibility` values:
 
 If `output_state = jinhua_candidate`, the Stop gate checks the invocation guard first. If jinhua already ran in the same turn, it skips duplicate triggering. If not, it may add a short reminder to consider the existing `cycle` / `log-signal` / `propose` flow. It must not bypass the user gate.
 
+The Stop gate also counts per conversation. Every 8 user turns by default, it sends one silent fallback reminder to scan this turn and prior conversation for reusable lessons; no candidate means no jinhua work.
+
 Codex hooks may not perfectly hide already-generated text in every host. This implementation parses and strips where the host supports it; absolute hiding requires an outer wrapper.
 
 ## Legacy Compatibility

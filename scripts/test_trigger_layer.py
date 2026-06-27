@@ -90,6 +90,34 @@ def test_stop_missing_tail_tickets_once() -> None:
         assert second["jinhua"]["missing_tail_ticketed"] is False
 
 
+def test_periodic_stop_is_per_session_and_light() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        args = args_for(Path(tmp))
+        for index in range(1, 8):
+            payload = {"session_id": "s1", "turn_id": f"u{index}", "prompt": "普通问题"}
+            output = jinhua.codex_user_prompt_submit_output(payload, args)
+            assert output["jinhua"]["turn_state"]["periodic_stop_due"] is False
+
+        due_payload = {"session_id": "s1", "turn_id": "u8", "prompt": "普通问题"}
+        due_output = jinhua.codex_user_prompt_submit_output(due_payload, args)
+        assert due_output["jinhua"]["turn_state"]["periodic_stop_due"] is True
+
+        other_session = {"session_id": "s2", "turn_id": "u1", "prompt": "普通问题"}
+        other_output = jinhua.codex_user_prompt_submit_output(other_session, args)
+        assert other_output["jinhua"]["turn_state"]["turn_count"] == 1
+        assert other_output["jinhua"]["turn_state"]["periodic_stop_due"] is False
+
+        stop_payload = {"session_id": "s1", "turn_id": "a8", "last_assistant_message": "Done."}
+        first_stop = jinhua.codex_stop_output(stop_payload, args)
+        assert first_stop["jinhua"]["periodic_stop"]["due"] is True
+        context = first_stop["hookSpecificOutput"]["additionalContext"]
+        assert "prior conversation" in context
+        assert len(context) < 170
+
+        second_stop = jinhua.codex_stop_output(stop_payload, args)
+        assert "periodic_stop" not in second_stop["jinhua"]
+
+
 def test_stop_candidate_skips_when_turn_already_called_jinhua() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         args = args_for(Path(tmp))
@@ -133,6 +161,7 @@ if __name__ == "__main__":
     test_invocation_guard_deduplicates_same_turn()
     test_agent_direct_call_is_allowed_once()
     test_stop_missing_tail_tickets_once()
+    test_periodic_stop_is_per_session_and_light()
     test_stop_candidate_skips_when_turn_already_called_jinhua()
     test_legacy_wake_check_is_not_primary_but_still_works()
     test_old_hook_is_not_manifest_primary_path()

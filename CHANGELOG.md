@@ -4,6 +4,7 @@
 
 - Grouped local correction matches by semantic category and returned structured match evidence from `classify-input`.
 - Expanded the fully local first gate for missed Skill/tool/procedure activation cues while keeping ordinary clarification prompts out of strong triggering.
+- Added a per-conversation periodic Stop fallback: every 8 user turns, jinhua sends one short silent reminder to scan current and prior conversation for reusable lessons.
 
 ## 2026-06-27 Localized User Gate And Second Slimming
 
