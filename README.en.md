@@ -8,10 +8,10 @@ It helps the model notice reusable methodology signals during real work, cluster
 
 Chinese visual guide: [docs/jinhua-logic.html](docs/jinhua-logic.html)
 
-The user gate is placement-aware:
+The user gate is placement-aware. In Chinese conversations, jinhua should display Chinese labels with canonical ids:
 
 ```text
-Project Rule / Skill Patch / Personal Global Skill / No / Revision
+项目规则(project_rule) / 增强已有 Skill(skill_patch) / 个人全局 Skill(personal_global_skill) / 拒绝(No) / 修订(Revision)
 ```
 
 User-facing dialogue follows the user's current conversation language. Durable data, CLI identifiers, JSON fields, and generated Skill files may remain English unless the user asks otherwise.
@@ -260,11 +260,8 @@ If one workspace contains unrelated projects or conversations, pass `--project-i
 - No external database.
 - No vector store.
 - No dashboard.
-- No machine-learning core loop.
 - No user gate bypass.
 - User-facing Skill dialogue follows the user's current language; executable identifiers stay English.
-
-The system stays small on purpose. Machine learning, if ever added, should only assist ranking or retrieval and must remain optional.
 
 ## License
 

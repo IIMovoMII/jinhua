@@ -2,6 +2,12 @@
 
 > 本文件是中文更新说明；英文辅助版本见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 2026-06-27 用户确认门本地化与二次瘦身
+
+- 用户可见确认门改为中文优先展示：`项目规则(project_rule)`、`增强已有 Skill(skill_patch)`、`个人全局 Skill(personal_global_skill)`、`拒绝(No)`、`修订(Revision)`。
+- 根目录 `data/` 只保留核心 operator 种子文件，删除容易误导为运行态的空账本模板。
+- 同步更新 README、Skill 说明、项目地图、hook 文档、术语表和静态逻辑图。
+
 ## 2026-06-27 Codex 三道闸门触发层
 
 - 用 Codex 优先的三道闸门触发层替换旧的 hook-first 唤醒路径：输入侧本地纠错分类、同轮 invocation guard 防重复、输出侧轻状态尾巴解析。

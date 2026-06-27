@@ -110,7 +110,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-pr
 ## Safety Rules
 
 - Do not auto-apply Skill edits.
-- Do not bypass the placement-aware user gate: Project Rule / Skill Patch / Personal Global Skill / No / Revision.
+- Do not bypass the placement-aware user gate: `project_rule`, `skill_patch`, `personal_global_skill`, `No`, or `Revision` displayed in the user's language.
 - Do not save original user text.
 - Do not copy raw project paths into global records.
 - Do not make hooks responsible for methodology judgment.

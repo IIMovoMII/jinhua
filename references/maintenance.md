@@ -44,7 +44,6 @@ The CLI must not:
 - store raw user text
 - run web searches
 - run as a daemon
-- make machine learning a required core dependency
 
 ## Architecture Rules
 
@@ -55,7 +54,6 @@ Do not add:
 - vector store
 - graph database
 - dashboard
-- ML core loop
 - multi-agent workflow
 
 Only reconsider architecture when a measured bottleneck appears in real runtime data.

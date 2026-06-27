@@ -14,13 +14,13 @@
 - 起草 Skill 修改提案。
 - 调用 CLI 记录和验证数据。
 
-用户只负责最后一道风险确认，但不再只有简单的 `Yes / No`：
+用户只负责最后一道风险确认，确认项尽量用中文展示，括号里保留内部落点值：
 
-- `Project Rule`：作为当前项目的轻量规则采纳。
-- `Skill Patch`：增强某个具体的已有本地 Skill。
-- `Personal Global Skill`：做成个人全局 Skill，或面向所有项目生效的规则。
-- `No`：拒绝提案，并让对应聚类进入冷却。
-- `Revision`：记录修改意见，重写后再确认。
+- `项目规则 (project_rule)`：作为当前项目的轻量规则采纳。
+- `增强已有 Skill (skill_patch)`：增强某个具体的已有本地 Skill。
+- `个人全局 Skill (personal_global_skill)`：做成个人全局 Skill，或面向所有项目生效的规则。
+- `拒绝 (No)`：拒绝提案，并让对应聚类进入冷却。
+- `修订 (Revision)`：记录修改意见，重写后再确认。
 
 ## 唤醒边界
 
@@ -46,7 +46,7 @@
 
 - CLI 命令、参数名、JSON 字段、id、文件路径和 operator id 不翻译。
 - 项目经验记录、信号摘要（signal summary）和生成出来的 Skill 文件可以保持英文，除非用户要求中文。
-- 用户确认可以本地化展示，但必须同时保留 `Yes`、`No`、`Revision`，避免误判。选择某个落点，就等价于对这个落点说 `Yes`。
+- 用户确认尽量本地化展示。必要时在中文后保留 `project_rule`、`skill_patch`、`personal_global_skill`、`No`、`Revision` 这些内部值，避免 CLI 决策歧义。
 
 ## Codex 触发层
 
@@ -243,8 +243,8 @@ Risk:
 [主要副作用]
 
 User gate:
-Choose: Project Rule / Skill Patch / Personal Global Skill / No / Revision
-（选择某个落点，就等价于 Yes 这个落点。）
+Choose: 项目规则(project_rule) / 增强已有 Skill(skill_patch) / 个人全局 Skill(personal_global_skill) / 拒绝(No) / 修订(Revision)
+（选择某个落点，就等价于采纳这个落点。）
 ```
 
 `decision` 值、proposal id、命令名、参数名、文件路径和代码片段保持英文。
@@ -270,15 +270,15 @@ Choose: Project Rule / Skill Patch / Personal Global Skill / No / Revision
 
 本地提案：
 
-- `Project Rule`、`Skill Patch` 或 `Personal Global Skill`：运行 `apply-proposal --placement <chosen-placement>`，然后 `cycle`。
-- `No`：运行 `reject-proposal`，然后 `cycle`。
-- `Revision`：运行 `reject-proposal --revision`，按反馈重写后再问。
+- `项目规则(project_rule)`、`增强已有 Skill(skill_patch)` 或 `个人全局 Skill(personal_global_skill)`：运行 `apply-proposal --placement <chosen-placement>`，然后 `cycle`。
+- `拒绝(No)`：运行 `reject-proposal`，然后 `cycle`。
+- `修订(Revision)`：运行 `reject-proposal --revision`，按反馈重写后再问。
 
 全局提案：
 
-- `Skill Patch` 或 `Personal Global Skill`：运行 `global-apply --placement <chosen-placement>`，然后 `cycle`。
-- `No`：运行 `global-reject`，然后 `cycle`。
-- `Revision`：运行 `global-reject --revision`，按反馈重写后再问。
+- `增强已有 Skill(skill_patch)` 或 `个人全局 Skill(personal_global_skill)`：运行 `global-apply --placement <chosen-placement>`，然后 `cycle`。
+- `拒绝(No)`：运行 `global-reject`，然后 `cycle`。
+- `修订(Revision)`：运行 `global-reject --revision`，按反馈重写后再问。
 
 被拒绝的聚类会进入冷却。除非出现更强证据，不要反复打扰用户。
 
@@ -286,6 +286,4 @@ Choose: Project Rule / Skill Patch / Personal Global Skill / No / Revision
 
 CLI 只做确定性账本工作：初始化、追加信号、聚类、全局导入、记录提案、记录用户确认、合并建议、压缩和验证。
 
-CLI 不判断某个方法是否智能、是否可迁移、是否值得写入 Skill。这些判断由模型完成，风险由用户确认。
-
-机器学习不是核心闭环。未来即使加入，也只能辅助排序或候选检索，不能绕过确定性规则、提案审查、数据验证和用户确认。
+CLI 不判断某个方法是否可迁移、是否值得写入 Skill。这些判断由模型完成，风险由用户确认。

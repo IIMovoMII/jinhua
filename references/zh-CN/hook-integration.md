@@ -112,7 +112,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-pr
 ## 安全规则
 
 - 不自动应用 Skill 修改。
-- 不绕过带落点的用户确认门：`Project Rule` / `Skill Patch` / `Personal Global Skill` / `No` / `Revision`。
+- 不绕过带落点的用户确认门：`项目规则(project_rule)` / `增强已有 Skill(skill_patch)` / `个人全局 Skill(personal_global_skill)` / `拒绝(No)` / `修订(Revision)`。
 - 不保存用户原文。
 - 不把原始项目路径复制到全局记录。
 - 不让 hook 负责方法论判断。

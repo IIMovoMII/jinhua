@@ -9,14 +9,14 @@
 确认入口现在是“带落点的确认”：
 
 ```text
-Project Rule / Skill Patch / Personal Global Skill / No / Revision
+项目规则(project_rule) / 增强已有 Skill(skill_patch) / 个人全局 Skill(personal_global_skill) / 拒绝(No) / 修订(Revision)
 ```
 
-- `Project Rule`：作为当前项目的轻量规则采纳。
-- `Skill Patch`：增强某个具体的已有本地 Skill。
-- `Personal Global Skill`：做成个人全局 Skill，或面向所有项目生效的规则。
-- `No`：拒绝，并让这类提案暂时冷却。
-- `Revision`：先按你的意见修改，再重新确认。
+- `项目规则(project_rule)`：作为当前项目的轻量规则采纳。
+- `增强已有 Skill(skill_patch)`：增强某个具体的已有本地 Skill。
+- `个人全局 Skill(personal_global_skill)`：做成个人全局 Skill，或面向所有项目生效的规则。
+- `拒绝(No)`：拒绝，并让这类提案暂时冷却。
+- `修订(Revision)`：先按你的意见修改，再重新确认。
 
 中文运行逻辑图见：[docs/jinhua-logic.html](docs/jinhua-logic.html)。
 
@@ -215,7 +215,7 @@ When recommending reusable external projects for adoption, verify the README and
   --summary "Added source-backed recommendation rule"
 ```
 
-用户选择 `No` 后记录拒绝：
+用户选择 `拒绝(No)` 后记录拒绝：
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal \
@@ -295,10 +295,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
 - 不依赖外部数据库。
 - 不依赖向量库。
 - 不做仪表盘（dashboard）。
-- 不把机器学习放进核心闭环。
 - 不绕过用户确认。
-
-未来即使加入机器学习，也只能作为可选的排序或检索辅助，不能替代确定性规则、数据验证和用户确认。
 
 ## 许可证
 

@@ -8,7 +8,7 @@ Responsibility split:
 
 - **Skill**: decides whether a signal is reusable, transferable, risky, duplicated, or worth proposing.
 - **CLI**: records signals, clusters evidence, imports global promotion evidence, emits placement-aware skeletons, recommends project-rule files, records gate outcomes, suggests merge candidates, compacts, and validates.
-- **User**: gates proposals with Project Rule / Skill Patch / Personal Global Skill / No / Revision.
+- **User**: gates proposals with localized labels backed by `project_rule`, `skill_patch`, `personal_global_skill`, `No`, and `Revision`.
 
 ## Main Files
 
@@ -60,14 +60,10 @@ jinhua/
 |-- docs/
 |   `-- jinhua-logic.html
 `-- data/
-    |-- signals.jsonl
-    |-- cluster-state.json
-    |-- proposals.jsonl
-    |-- adopted-edits.jsonl
-    |-- rejected-proposals.jsonl
-    |-- crystallized-operators.jsonl
-    `-- evolution-state.json
+    `-- crystallized-operators.jsonl
 ```
+
+Root `data/` contains seed data only. Runtime state lives in the target project's `.jinhua/data/`.
 
 Runtime-only global promotion directory:
 
@@ -127,7 +123,7 @@ The public CLI surface is intentionally focused on the closed loop above. `wake-
 - Do not count duplicate same-project signals as cross-project repetition.
 - Do not ask the user to find the target Skill when `skill_patch` is the recommended placement.
 - Do not auto-create project rule files when `project_rule` is the recommended placement.
-- Do not add daemon, database, vector store, dashboard, or ML core loop.
+- Do not add daemon, database, vector store, or dashboard.
 - Do not add broad observation commands as first-class workflow.
 - Do not make hooks own experience logic; they only classify, guard, and parse state tails.
 - Keep repo-local plugin metadata thin: marketplace files route discovery, `.codex-plugin/plugin.json` exposes Codex hooks and skills, and the canonical methodology logic stays in the root `SKILL.md`.

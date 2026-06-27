@@ -9,13 +9,13 @@ description: Methodology Skill for reusable workflow signals and Skill evolution
 
 Turn repeated task experience into small, user-gated Skill improvements.
 
-The model handles detection, clustering, abstraction, placement recommendation, proposal drafting, and CLI invocation. The user is only the risk gate:
+The model handles detection, clustering, abstraction, placement recommendation, proposal drafting, and CLI invocation. The user is only the risk gate. Show the gate in the user's language; for Chinese users, use:
 
-- `Project Rule`: accept as a lightweight current-project rule.
-- `Skill Patch`: accept as an enhancement to a specific existing local Skill.
-- `Personal Global Skill`: accept as a personal global Skill or all-project rule.
-- `No`: reject it and cool down the cluster.
-- `Revision`: record revision feedback, rewrite, and ask the same gate again.
+- `项目规则 (project_rule)`: accept as a lightweight current-project rule.
+- `增强已有 Skill (skill_patch)`: accept as an enhancement to a specific existing local Skill.
+- `个人全局 Skill (personal_global_skill)`: accept as a personal global Skill or all-project rule.
+- `拒绝 (No)`: reject it and cool down the cluster.
+- `修订 (Revision)`: record revision feedback, rewrite, and ask the same gate again.
 
 ## Trigger Boundary
 
@@ -31,6 +31,10 @@ After this Skill is selected, keep the wake-up boundary tight:
 
 ## Interaction Language
 
+### Localized Display Labels
+
+When jinhua shows user-facing gates, status summaries, or proposal prompts, use the user's current language for display labels while keeping canonical CLI values, JSON keys, command names, file paths, and placement ids unchanged. For Chinese users, prefer labels such as 项目规则(project_rule), 增强已有 Skill(skill_patch), 个人全局 Skill(personal_global_skill), 拒绝(No), 修订(Revision), 信号, 聚类, 就绪, and 待确认门.
+
 Use the user's current conversation language for all user-facing dialogue from this Skill.
 
 Examples:
@@ -43,7 +47,7 @@ Keep durable data and executable identifiers stable:
 
 - CLI commands, option names, JSON fields, ids, file paths, and operator ids stay in English.
 - Project experience records, signal summaries, and generated Skill files may stay in English unless the user asks otherwise.
-- The user gate may be localized for display, but include the canonical tokens `Yes`, `No`, and `Revision` so the decision is unambiguous. A placement choice counts as `Yes` for that placement.
+- Localize user gate labels for display. Include canonical placement ids such as `project_rule`, `skill_patch`, and `personal_global_skill` in parentheses when needed so the CLI decision is unambiguous.
 
 ## Codex Trigger Layer
 
@@ -246,8 +250,8 @@ Risk:
 [main side effect]
 
 User gate:
-Choose: Project Rule / Skill Patch / Personal Global Skill / No / Revision
-(Choosing a placement counts as Yes for that placement.)
+Choose: 项目规则(project_rule) / 增强已有 Skill(skill_patch) / 个人全局 Skill(personal_global_skill) / 拒绝(No) / 修订(Revision)
+Choosing a placement means accepting that placement.
 ```
 
 Keep `decision` values, proposal ids, command names, option names, file paths, and code snippets in English even when the surrounding explanation is localized.
@@ -273,15 +277,15 @@ Use `global-merge-suggestions` to inspect similar global clusters. It never muta
 
 For local proposals:
 
-- `Project Rule`, `Skill Patch`, or `Personal Global Skill`: run `apply-proposal --placement <chosen-placement>`, then `cycle`.
-- `No`: run `reject-proposal`, then `cycle`.
-- `Revision`: run `reject-proposal --revision`, rewrite, and ask again.
+- `项目规则(project_rule)`, `增强已有 Skill(skill_patch)`, or `个人全局 Skill(personal_global_skill)`: run `apply-proposal --placement <chosen-placement>`, then `cycle`.
+- `拒绝(No)`: run `reject-proposal`, then `cycle`.
+- `修订(Revision)`: run `reject-proposal --revision`, rewrite, and ask again.
 
 For global proposals:
 
-- `Skill Patch` or `Personal Global Skill`: run `global-apply --placement <chosen-placement>`, then `cycle`.
-- `No`: run `global-reject`, then `cycle`.
-- `Revision`: run `global-reject --revision`, rewrite, and ask again.
+- `增强已有 Skill(skill_patch)` or `个人全局 Skill(personal_global_skill)`: run `global-apply --placement <chosen-placement>`, then `cycle`.
+- `拒绝(No)`: run `global-reject`, then `cycle`.
+- `修订(Revision)`: run `global-reject --revision`, rewrite, and ask again.
 
 Rejected clusters enter cooldown. Do not bother the user again unless stronger evidence appears.
 
@@ -289,6 +293,4 @@ Rejected clusters enter cooldown. Do not bother the user again unless stronger e
 
 The CLI performs deterministic ledger work: init, signal append, clustering, global import, proposal records, gate outcomes, merge suggestions, compaction, and validation.
 
-The CLI does not decide whether a method is intelligent, transferable, or worth writing. The model makes that judgment and the user gates risk.
-
-Machine learning is not part of the core loop. If ever added, it may only assist ranking or candidate retrieval; it must not bypass deterministic rules, proposal review, validation, or the user gate.
+The CLI does not decide whether a method is transferable or worth writing. The model makes that judgment and the user gates risk.

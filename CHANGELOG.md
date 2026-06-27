@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-06-27 Localized User Gate And Second Slimming
+
+- Changed user-facing gate labels to Chinese-first display with stable canonical ids: `项目规则(project_rule)`, `增强已有 Skill(skill_patch)`, `个人全局 Skill(personal_global_skill)`, `拒绝(No)`, and `修订(Revision)`.
+- Kept only the core operator seed file under root `data/`; removed empty ledger templates that looked like runtime state.
+- Updated README, Skill docs, project maps, hook docs, glossary, and the static logic page.
+
 ## 2026-06-27 Codex Three-Gate Trigger Layer
 
 - Replaced the old hook-first wake path with a Codex-focused three-gate trigger layer: local input correction classification, same-turn invocation guard, and lightweight output-state tail parsing.

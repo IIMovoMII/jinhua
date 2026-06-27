@@ -10,7 +10,7 @@
 
 - **Skill**：判断信号是否可复用、可迁移、有风险、重复，是否值得形成提案。
 - **CLI**：记录信号、更新聚类、导入全局晋升证据、输出带落点的提案骨架、推荐项目规则文件、记录用户确认、给出合并建议、压缩并验证数据。
-- **用户**：只做最后的风险确认，也就是 `Project Rule`、`Skill Patch`、`Personal Global Skill`、`No`、`Revision`。
+- **用户**：只做最后的风险确认，也就是 `项目规则(project_rule)`、`增强已有 Skill(skill_patch)`、`个人全局 Skill(personal_global_skill)`、`拒绝(No)`、`修订(Revision)`。
 
 ## 主要文件
 
@@ -72,14 +72,10 @@ jinhua/
 ├── docs/
 │   └── jinhua-logic.html
 └── data/
-    ├── signals.jsonl
-    ├── cluster-state.json
-    ├── proposals.jsonl
-    ├── adopted-edits.jsonl
-    ├── rejected-proposals.jsonl
-    ├── crystallized-operators.jsonl
-    └── evolution-state.json
+    └── crystallized-operators.jsonl
 ```
+
+根目录 `data/` 只保留初始化种子数据；真实运行态在项目的 `.jinhua/data/`。
 
 全局晋升运行态目录：
 
@@ -141,7 +137,7 @@ jinhua/global-data/
 - 不要把同一项目的重复信号算成跨项目重复。
 - 推荐落点是 `skill_patch` 时，不要让用户自己找目标 Skill。
 - 推荐落点是 `project_rule` 时，不要自动创建项目规则文件。
-- 不要添加后台进程、外部数据库、向量库、仪表盘或机器学习核心闭环。
+- 不要添加后台进程、外部数据库、向量库或仪表盘。
 - 不要把宽泛的观察命令加入主流程。
 - 不要让 hook 承担经验系统；hook 只做分类、防重复和状态尾巴解析。
 - 仓库内插件元数据保持很薄：marketplace 文件负责被发现，`.codex-plugin/plugin.json` 暴露 Codex hooks 和 skills，真正的方法论逻辑仍然集中在根目录 `SKILL.md`。

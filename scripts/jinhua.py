@@ -97,7 +97,12 @@ PROPOSAL_PLACEMENTS = {
     "personal_global_skill",
 }
 PLACEMENT_USER_GATE = (
-    "project_rule(Yes) / skill_patch(Yes) / personal_global_skill(Yes) / No / Revision"
+    "项目规则(project_rule) / 增强已有 Skill(skill_patch) / "
+    "个人全局 Skill(personal_global_skill) / 拒绝(No) / 修订(Revision)"
+)
+GLOBAL_USER_GATE = (
+    "增强已有 Skill(skill_patch) / 个人全局 Skill(personal_global_skill) / "
+    "拒绝(No) / 修订(Revision)"
 )
 OPERATOR_TIERS = {"core", "experimental", "deprecated", "none"}
 SCORE_KEYS = [
@@ -120,6 +125,33 @@ GLOBAL_STRENGTH_THRESHOLD = 7
 GLOBAL_FAST_PROJECT_THRESHOLD = 2
 GLOBAL_FAST_STRENGTH_THRESHOLD = 6
 DEFAULT_RUNTIME_DIR_NAME = ".jinhua"
+STATUS_LABELS = {
+    "runtime": "运行态",
+    "global_runtime": "全局运行态",
+    "signals": "信号",
+    "clusters": "聚类",
+    "ready": "就绪",
+    "pending_gates": "待确认门",
+    "global": "全局",
+    "imported": "已导入",
+    "projects": "项目",
+    "global_signals": "全局信号",
+    "global_clusters": "全局聚类",
+    "active": "活跃",
+    "proposed": "已提案",
+    "cooldown": "冷却",
+    "proposals": "提案",
+    "global_proposals": "全局提案",
+    "pending_user_gate": "等待用户确认",
+    "needs_revision": "需要修订",
+    "adopted_skill_edits": "已采纳 Skill 修改",
+    "adopted_global_edits": "已采纳全局修改",
+    "rejected_proposals": "已拒绝提案",
+    "rejected_global_proposals": "已拒绝全局提案",
+    "last_proposal_id": "最后提案 ID",
+    "created": "已创建",
+    "ready_state": "就绪",
+}
 
 OUTPUT_STATES = {
     "ok",
@@ -1572,15 +1604,21 @@ def command_global_cycle(args: argparse.Namespace) -> None:
             raise SystemExit(2)
         return
 
-    print(f"Global runtime: {summary['global_runtime']}")
+    print(f"{STATUS_LABELS['global_runtime']}: {summary['global_runtime']}")
     print(
-        "Imported: {imported} | Projects: {projects} | Global signals: {signals} | "
-        "Clusters: {clusters} | Ready: {ready} | Pending gates: {pending}".format(
+        "{imported_label}: {imported} | {projects_label}: {projects} | {signals_label}: {signals} | "
+        "{clusters_label}: {clusters} | {ready_label}: {ready} | {pending_label}: {pending}".format(
+            imported_label=STATUS_LABELS["imported"],
             imported=summary["imported"],
+            projects_label=STATUS_LABELS["projects"],
             projects=summary["projects"],
+            signals_label=STATUS_LABELS["global_signals"],
             signals=summary["global_signals"],
+            clusters_label=STATUS_LABELS["clusters"],
             clusters=summary["clusters"],
+            ready_label=STATUS_LABELS["ready"],
             ready=summary["cluster_counts"].get("ready", 0),
+            pending_label=STATUS_LABELS["pending_gates"],
             pending=summary["proposal_counts"].get("pending_user_gate", 0),
         )
     )
@@ -1619,19 +1657,19 @@ def command_global_cycle(args: argparse.Namespace) -> None:
 
 def command_global_status(args: argparse.Namespace) -> None:
     summary = collect_global_summary(args)
-    print(f"Global runtime: {summary['global_runtime']}")
-    print(f"Projects: {summary['projects']}")
-    print(f"Global signals: {summary['global_signals']}")
-    print(f"Global clusters: {summary['clusters']}")
-    print(f"  active:   {summary['cluster_counts'].get('active', 0)}")
-    print(f"  ready:    {summary['cluster_counts'].get('ready', 0)}")
-    print(f"  proposed: {summary['cluster_counts'].get('proposed', 0)}")
-    print(f"  cooldown: {summary['cluster_counts'].get('cooldown', 0)}")
-    print(f"Global proposals: {summary['global_proposals']}")
-    print(f"  pending user gate: {summary['proposal_counts'].get('pending_user_gate', 0)}")
-    print(f"  needs revision:    {summary['proposal_counts'].get('needs_revision', 0)}")
-    print(f"Adopted global edits: {summary['adopted_global_edits']}")
-    print(f"Rejected global proposals: {summary['rejected_global_proposals']}")
+    print(f"{STATUS_LABELS['global_runtime']}: {summary['global_runtime']}")
+    print(f"{STATUS_LABELS['projects']}: {summary['projects']}")
+    print(f"{STATUS_LABELS['global_signals']}: {summary['global_signals']}")
+    print(f"{STATUS_LABELS['global_clusters']}: {summary['clusters']}")
+    print(f"  {STATUS_LABELS['active']}:   {summary['cluster_counts'].get('active', 0)}")
+    print(f"  {STATUS_LABELS['ready']}:    {summary['cluster_counts'].get('ready', 0)}")
+    print(f"  {STATUS_LABELS['proposed']}: {summary['cluster_counts'].get('proposed', 0)}")
+    print(f"  {STATUS_LABELS['cooldown']}: {summary['cluster_counts'].get('cooldown', 0)}")
+    print(f"{STATUS_LABELS['global_proposals']}: {summary['global_proposals']}")
+    print(f"  {STATUS_LABELS['pending_user_gate']}: {summary['proposal_counts'].get('pending_user_gate', 0)}")
+    print(f"  {STATUS_LABELS['needs_revision']}:    {summary['proposal_counts'].get('needs_revision', 0)}")
+    print(f"{STATUS_LABELS['adopted_global_edits']}: {summary['adopted_global_edits']}")
+    print(f"{STATUS_LABELS['rejected_global_proposals']}: {summary['rejected_global_proposals']}")
 
 
 def command_global_merge_suggestions(args: argparse.Namespace) -> None:
@@ -2257,8 +2295,8 @@ Risk:
 {proposal['risk']}
 
 User gate:
-Choose: Project Rule / Skill Patch / Personal Global Skill / No / Revision
-(Choosing a placement counts as Yes for that placement.)
+Choose: {GLOBAL_USER_GATE}
+Choosing a placement means accepting that placement.
 
 Proposal ID:
 {proposal_id}
@@ -2570,8 +2608,8 @@ Risk:
 {proposal['risk']}
 
 User gate:
-Choose: Project Rule / Skill Patch / Personal Global Skill / No / Revision
-(Choosing a placement counts as Yes for that placement.)
+Choose: {PLACEMENT_USER_GATE}
+Choosing a placement means accepting that placement.
 
 Proposal ID:
 {proposal_id}
@@ -2735,19 +2773,19 @@ def command_status(args: argparse.Namespace) -> None:
     counts = Counter(c.get("status", "unknown") for c in clusters.values())
     proposal_counts = Counter(p.get("status", "unknown") for p in proposals)
 
-    print(f"Runtime: {runtime_root(args)}")
-    print(f"Signals: {len(signals)}")
-    print(f"Clusters: {len(clusters)}")
-    print(f"  active:   {counts.get('active', 0)}")
-    print(f"  ready:    {counts.get('ready', 0)}")
-    print(f"  proposed: {counts.get('proposed', 0)}")
-    print(f"  cooldown: {counts.get('cooldown', 0)}")
-    print(f"Proposals: {len(proposals)}")
-    print(f"  pending user gate: {proposal_counts.get('pending_user_gate', 0)}")
-    print(f"  needs revision:    {proposal_counts.get('needs_revision', 0)}")
-    print(f"Adopted Skill edits: {len(adopted)}")
-    print(f"Rejected proposals: {len(rejected_props)}")
-    print(f"Last proposal ID: {state.get('last_proposal_id', '')}")
+    print(f"{STATUS_LABELS['runtime']}: {runtime_root(args)}")
+    print(f"{STATUS_LABELS['signals']}: {len(signals)}")
+    print(f"{STATUS_LABELS['clusters']}: {len(clusters)}")
+    print(f"  {STATUS_LABELS['active']}:   {counts.get('active', 0)}")
+    print(f"  {STATUS_LABELS['ready']}:    {counts.get('ready', 0)}")
+    print(f"  {STATUS_LABELS['proposed']}: {counts.get('proposed', 0)}")
+    print(f"  {STATUS_LABELS['cooldown']}: {counts.get('cooldown', 0)}")
+    print(f"{STATUS_LABELS['proposals']}: {len(proposals)}")
+    print(f"  {STATUS_LABELS['pending_user_gate']}: {proposal_counts.get('pending_user_gate', 0)}")
+    print(f"  {STATUS_LABELS['needs_revision']}:    {proposal_counts.get('needs_revision', 0)}")
+    print(f"{STATUS_LABELS['adopted_skill_edits']}: {len(adopted)}")
+    print(f"{STATUS_LABELS['rejected_proposals']}: {len(rejected_props)}")
+    print(f"{STATUS_LABELS['last_proposal_id']}: {state.get('last_proposal_id', '')}")
 
 
 def collect_runtime_summary(args: argparse.Namespace) -> dict:
@@ -2831,13 +2869,17 @@ def command_cycle(args: argparse.Namespace) -> None:
             raise SystemExit(2)
         return
 
-    state_label = "created" if initialized else "ready"
-    print(f"Runtime: {summary['runtime']} ({state_label})")
+    state_label = STATUS_LABELS["created"] if initialized else STATUS_LABELS["ready_state"]
+    print(f"{STATUS_LABELS['runtime']}: {summary['runtime']} ({state_label})")
     print(
-        "Signals: {signals} | Clusters: {clusters} | Ready: {ready} | Pending gates: {pending}".format(
+        "{signals_label}: {signals} | {clusters_label}: {clusters} | {ready_label}: {ready} | {pending_label}: {pending}".format(
+            signals_label=STATUS_LABELS["signals"],
             signals=summary["signals"],
+            clusters_label=STATUS_LABELS["clusters"],
             clusters=summary["clusters"],
+            ready_label=STATUS_LABELS["ready"],
             ready=summary["cluster_counts"].get("ready", 0),
+            pending_label=STATUS_LABELS["pending_gates"],
             pending=summary["proposal_counts"].get("pending_user_gate", 0),
         )
     )
@@ -2845,12 +2887,18 @@ def command_cycle(args: argparse.Namespace) -> None:
     global_summary = summary.get("global")
     if global_summary:
         print(
-            "Global: Imported {imported} | Projects {projects} | Clusters {clusters} | "
-            "Ready {ready} | Pending gates {pending}".format(
+            "{global_label}: {imported_label} {imported} | {projects_label} {projects} | "
+            "{clusters_label} {clusters} | {ready_label} {ready} | {pending_label} {pending}".format(
+                global_label=STATUS_LABELS["global"],
+                imported_label=STATUS_LABELS["imported"],
                 imported=global_summary["imported"],
+                projects_label=STATUS_LABELS["projects"],
                 projects=global_summary["projects"],
+                clusters_label=STATUS_LABELS["clusters"],
                 clusters=global_summary["clusters"],
+                ready_label=STATUS_LABELS["ready"],
                 ready=global_summary["cluster_counts"].get("ready", 0),
+                pending_label=STATUS_LABELS["pending_gates"],
                 pending=global_summary["proposal_counts"].get("pending_user_gate", 0),
             )
         )
@@ -2900,7 +2948,7 @@ def command_cycle(args: argparse.Namespace) -> None:
                 print(f"  risk_hint: {skeleton.get('risk_hint', '')}")
         print(
             "\nNext: run `propose` with the refined skeleton, then ask the user to choose "
-            "Project Rule / Skill Patch / Personal Global Skill / No / Revision."
+            f"{PLACEMENT_USER_GATE}."
         )
 
     if global_summary and global_summary["ready_clusters"]:
@@ -2923,7 +2971,7 @@ def command_cycle(args: argparse.Namespace) -> None:
                 print(f"  risk_hint: {skeleton.get('risk_hint', '')}")
         print(
             "\nNext: run `global-propose` with the refined skeleton, then ask the user to choose "
-            "Skill Patch / Personal Global Skill / No / Revision."
+            f"{GLOBAL_USER_GATE}."
         )
     elif not summary["pending_proposals"] and not summary["ready_clusters"] and not (
         global_summary and (global_summary["pending_proposals"] or global_summary["ready_clusters"])
