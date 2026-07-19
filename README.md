@@ -20,6 +20,8 @@
 
 中文运行逻辑图见：[docs/jinhua-logic.html](docs/jinhua-logic.html)。
 
+项目导航：智能体先读 [AGENTS.md](AGENTS.md)；结构和维护规则见 [PROJECT_RULES.md](PROJECT_RULES.md)；逐文件职责见 [PROJECT_INDEX.md](PROJECT_INDEX.md)。
+
 ## 它解决什么
 
 很多智能体（Agent）用久了会遇到同一个问题：你反复教它某种做法，但这些经验很难稳定沉淀到 Skill 里。`jinhua` 的目标就是把这个过程做成闭环：

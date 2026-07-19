@@ -1,5 +1,7 @@
 # PROJECT_MAP
 
+Daily agent entry: read `AGENTS.md`, then `PROJECT_RULES.md` and `PROJECT_INDEX.md` when the task affects structure or file ownership.
+
 ## Product Shape
 
 `jinhua` is a compact Skill + CLI that turns repeated methodology signals into user-gated Skill improvements.
@@ -23,6 +25,9 @@ jinhua/
 |-- SECURITY.en.md
 |-- CODE_OF_CONDUCT.md
 |-- CODE_OF_CONDUCT.en.md
+|-- AGENTS.md
+|-- PROJECT_RULES.md
+|-- PROJECT_INDEX.md
 |-- PROJECT_MAP.md
 |-- CHANGELOG.md
 |-- .github/
@@ -44,8 +49,7 @@ jinhua/
 |   |-- codex-hooks.json
 |   |-- codex_user_prompt_submit.py
 |   |-- codex_post_tool_use.py
-|   |-- codex_stop.py
-|   `-- claude-codex-hooks.json (legacy)
+|   `-- codex_stop.py
 |-- adapters/
 |   |-- README.md
 |   |-- openclaw/

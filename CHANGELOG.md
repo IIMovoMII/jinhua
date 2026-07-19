@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-07-19 Project Navigation And Archive Boundary
+
+- Added short agent instructions, project rules, and a file-by-file project index so future work can load the relevant active files without scanning runtime data or history.
+- Moved the superseded `claude-codex-hooks.json` wrapper and generated Python caches to the local ignored `.archive/` directory.
+- Kept `.jinhua/` and `global-data/` in place because they are active runtime state, not obsolete files.
+
 ## 2026-07-19 Codex Hook Trust And Runtime Verification
 
 - Confirmed that Codex discovers all three Jinhua trigger hooks through the plugin manifest and resolves their commands from `${CLAUDE_PLUGIN_ROOT}`.

@@ -2,6 +2,12 @@
 
 > 本文件是中文更新说明；英文辅助版本见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 2026-07-19 项目导航与归档边界
+
+- 新增简短的智能体说明、项目规范和逐文件索引，让后续任务只读取相关 active 文件，不扫描运行态和历史文件。
+- 已把被新触发层替代的 `claude-codex-hooks.json` 和 Python 生成缓存移到本地、被忽略的 `.archive/`。
+- 保留 `.jinhua/` 和 `global-data/`，因为它们是正在使用的运行态，不是过时文件。
+
 ## 2026-07-19 Codex Hook 信任与运行验证
 
 - 已确认 Codex 能通过插件清单发现 Jinhua 的三个触发 Hook，并把命令解析到 `${CLAUDE_PLUGIN_ROOT}` 下。

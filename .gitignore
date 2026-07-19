@@ -12,3 +12,6 @@ skill.zip
 __pycache__/
 *.pyc
 *.pyo
+
+# Local historical/archive material, never packaged
+.archive/

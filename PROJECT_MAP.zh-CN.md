@@ -2,6 +2,8 @@
 
 > 本文件是中文项目地图；英文辅助版本见 [PROJECT_MAP.md](PROJECT_MAP.md)。
 
+日常入口：先读 `AGENTS.md`；任务涉及结构或文件归属时，再读 `PROJECT_RULES.md` 和 `PROJECT_INDEX.md`。
+
 ## 产品形态
 
 `jinhua` 是一个小型 Skill + 单文件 CLI。它负责把反复出现的方法论信号，转成经过用户确认的 Skill 改进。
@@ -26,6 +28,9 @@ jinhua/
 ├── SECURITY.en.md
 ├── CODE_OF_CONDUCT.md
 ├── CODE_OF_CONDUCT.en.md
+├── AGENTS.md
+├── PROJECT_RULES.md
+├── PROJECT_INDEX.md
 ├── PROJECT_MAP.md
 ├── PROJECT_MAP.zh-CN.md
 ├── CHANGELOG.md
@@ -49,8 +54,7 @@ jinhua/
 │   ├── codex-hooks.json
 │   ├── codex_user_prompt_submit.py
 │   ├── codex_post_tool_use.py
-│   ├── codex_stop.py
-│   └── claude-codex-hooks.json（legacy）
+│   └── codex_stop.py
 ├── adapters/
 │   ├── README.md
 │   ├── openclaw/

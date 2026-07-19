@@ -117,7 +117,7 @@ python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" 
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
 ```
 
-`hooks/claude-codex-hooks.json` 已标记 deprecated，并指向 `hooks/codex-hooks.json`。
+旧的 `hooks/claude-codex-hooks.json` 已从 active 目录移出。`.archive/legacy/` 下可能保留本地历史副本，但它不会被加载、打包，也不是主触发路径。
 
 ## 宿主适配
 

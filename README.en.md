@@ -8,6 +8,8 @@ It helps the model notice reusable methodology signals during real work, cluster
 
 Chinese visual guide: [docs/jinhua-logic.html](docs/jinhua-logic.html)
 
+Project navigation: agents should start with [AGENTS.md](AGENTS.md); structural and maintenance rules live in [PROJECT_RULES.md](PROJECT_RULES.md); file ownership is listed in [PROJECT_INDEX.md](PROJECT_INDEX.md).
+
 The user gate is placement-aware. In Chinese conversations, jinhua should display Chinese labels with canonical ids:
 
 ```text

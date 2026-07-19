@@ -115,7 +115,7 @@ python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" 
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
 ```
 
-`hooks/claude-codex-hooks.json` is deprecated and points to `hooks/codex-hooks.json`.
+The former `hooks/claude-codex-hooks.json` wrapper has been removed from the active tree. A local historical copy may exist under `.archive/legacy/`; it is not loaded, packaged, or part of the primary trigger path.
 
 ## Host Adapters
 
