@@ -45,8 +45,7 @@ jinhua/
 ├── hooks/
 │   ├── hooks.json
 │   ├── codex_user_prompt_submit.py
-│   ├── codex_post_tool_use.py
-│   └── codex_stop.py
+│   └── codex_post_tool_use.py
 ├── skills/jinhua/
 │   └── SKILL.md
 ├── adapters/
@@ -84,7 +83,7 @@ jinhua/
 
 ## 当前 CLI
 
-`init`、`cycle`、`global-cycle`、`classify-input`、`codex-user-prompt-submit`、`codex-post-tool-use`、`codex-stop`、`guard`、`log-signal`、`list-clusters`、`propose`、`apply-proposal`、`reject-proposal`、`global-propose`、`global-apply`、`global-reject`、`status`、`global-status`、`validate`。
+`init`、`cycle`、`global-cycle`、`classify-input`、`codex-user-prompt-submit`、`codex-post-tool-use`、`guard`、`log-signal`、`list-clusters`、`propose`、`apply-proposal`、`reject-proposal`、`global-propose`、`global-apply`、`global-reject`、`status`、`global-status`、`validate`。
 
 apply 命令只记账。提案命令必须提供具体目标、带标题的完整 Markdown 修改块和具体风险。
 

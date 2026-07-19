@@ -2,11 +2,13 @@
 
 ## Unreleased
 
+- Moved the fixed eight-turn third-gate review from Codex's user-visible Stop `HookPrompt` path to `UserPromptSubmit.additionalContext`; all three logical gates remain, with no extra continuation or visible internal prompt.
+- Removed `codex-stop`, the Stop wrapper, the Stop hook entry, and periodic tickets; the next input Hook cleans obsolete trigger-runtime fields.
 - Unified Codex and Claude Code on the official default `hooks/hooks.json`; removed the duplicate `hooks/codex-hooks.json` and manifest override. This trigger package now requires Codex 0.144.6 or newer.
 - Fixed PostToolUse false positives caused by Jinhua command text in README content, user prompts, search expressions, or tool output.
-- Project, session, turn, and Stop-recursion state now comes only from authoritative host fields; unknown payload shapes leave invocation-guard state unchanged.
+- Project, session, and turn state now comes only from authoritative host fields; unknown payload shapes leave invocation-guard state unchanged.
 - Codex uses `turn_id`, Claude Code also supports `prompt_id`, and multiple Jinhua subcommands in one turn create only one guard event.
-- Added negative tests that distinguish mentioning a command from executing it and reject spoofed `cwd`, session, turn, and `stop_hook_active` fields.
+- Added negative tests that distinguish mentioning a command from executing it and reject spoofed `cwd`, session, turn, and arbitrary nested text.
 
 ## 2.0.0 - 2026-07-19
 

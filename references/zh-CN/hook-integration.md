@@ -12,9 +12,8 @@ CLI 不是后台进程。Hook 只做分类、计数、提醒和去重，不负�
 ## Codex 三道触发闸门
 
 ```text
-UserPromptSubmit -> 本地纠错分类 + 就绪提醒 + 回合计数
-PostToolUse      -> 调用保护门记录
-Stop             -> 固定每 8 轮回顾 + 防循环
+UserPromptSubmit -> 第一道本地纠错/就绪提醒 + 第三道固定每 8 轮隐藏回顾
+PostToolUse      -> 第二道调用保护门记录
 ```
 
 共享文件 `hooks/hooks.json` 调用：
@@ -22,10 +21,9 @@ Stop             -> 固定每 8 轮回顾 + 防循环
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
 python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py"
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
 ```
 
-三个 wrapper 都把 stdin 原样转发给 `scripts/jinhua.py` 中对应命令。
+两个 wrapper 都把 stdin 原样转发给 `scripts/jinhua.py` 中对应命令。
 Codex manifest 不再重复声明 `hooks` 路径，由 Codex 自动发现这份官方默认文件。该目录结构要求 Codex 0.144.6 或更高版本；Claude Code 也使用同一个文件。
 
 ## 项目根目录解析
@@ -41,9 +39,9 @@ wrapper 按以下顺序定位目标项目：
 
 ## Hook 权威证据
 
-执行事实和 Hook 身份只从宿主有文档定义、且 Jinhua 明确支持的控制字段读取。Codex 和 Claude Code 会把 `session_id`、`turn_id` 或 `prompt_id`、`cwd`、`stop_hook_active`、`tool_name`、`tool_input.command` 等字段作为控制数据传入。
+执行事实和 Hook 身份只从宿主有文档定义、且 Jinhua 明确支持的控制字段读取。Codex 和 Claude Code 会把 `session_id`、`turn_id` 或 `prompt_id`、`cwd`、`tool_name`、`tool_input.command` 等字段作为控制数据传入。
 
-Jinhua 不会从用户输入、文档、工具输出、错误日志或任意嵌套文本推断“命令已执行”、项目身份、会话身份、回合身份或 Stop 递归状态。文本里提到命令不等于命令真的执行；只有命令证据和会话/回合身份都来自权威字段时才写调用保护状态。遇到未知或字段不完整的 payload 时，运行态保持不变；只有新增明确字段映射和回归测试后才支持该结构。
+Jinhua 不会从用户输入、文档、工具输出、错误日志或任意嵌套文本推断“命令已执行”、项目身份、会话身份或回合身份。文本里提到命令不等于命令真的执行；只有命令证据和会话/回合身份都来自权威字段时才写调用保护状态。遇到未知或字段不完整的 payload 时，运行态保持不变；只有新增明确字段映射和回归测试后才支持该结构。
 
 ## 宿主信任边界
 
@@ -64,7 +62,7 @@ Hook 被发现和真正执行是两个状态。插件更新后，Codex 可能把
 同一个 Hook 还会：
 
 - 按哈希化 session 统计不同用户回合；
-- 每 8 轮把周期检查标为待执行；
+- 每 8 个不同用户回合向当前正常模型调用注入一次极短周期回顾；
 - 只读检查已有本地/全局就绪聚类和待确认门；
 - 按需增加一句就绪提醒。
 
@@ -88,33 +86,36 @@ python <jinhua-dir>/scripts/jinhua.py classify-input \
 <project-root>/.jinhua/runtime/invocation-guard.json
 ```
 
-它保存哈希化 session/turn、原因摘要哈希、入口、时间、近期事件、回合计数和周期票据。这不是经验账本。
+它保存哈希化 session/turn、原因摘要哈希、入口、时间、近期事件和回合计数。这不是经验账本。
 
 保护门结果：
 
 - `allow`：第一次有效进入；
-- `already_handled`：Stop 发现本轮已经进入 Jinhua；
+- `already_handled`：检查路径发现本轮已经进入 Jinhua；
 - `skip_duplicate`：同轮同原因重复；
 - `block_loop`：同轮多次进入，疑似循环。
 
 Agent 当前轮第一次直接调用始终允许。同一轮后续 Jinhua 子命令属于同一次受保护流程，不再新增保护事件；保护门只拦重复触发路径。
 
-## 第三道：Stop 周期回顾
+## 第三道：隐藏周期回顾
 
-`codex-stop` 只负责：
+第三道门与第一道共用 `UserPromptSubmit`，但判断条件独立：
 
-1. `stop_hook_active` 为真时立即放行；
-2. 当前 session 满 8 个不同用户回合时，请求一次极短继续，让 Agent 检查本轮及此前对话是否出现可复用方法。
+1. 每个 session 独立统计不同 `turn_id`；
+2. 第 8、16、24……个新用户回合，把一句极短回顾放进 `hookSpecificOutput.additionalContext`；
+3. Agent 在当前正常模型调用中检查本轮及此前对话；
+4. 同一 `turn_id` 的重复 Hook 调用不会再次注入。
 
-请求继续前先查调用保护门。本轮已经运行 Jinhua 时，会消费周期票据并直接放行。
+Codex 官方实现会把 Stop Hook 的 `decision:block + reason` 转为独立 `HookPrompt` 对话项，而且 Stop 路径目前不使用 `suppressOutput` 隐藏该提示。因此 Jinhua 不再注册 Stop Hook，也不保留 `codex-stop` 命令。
 
-Stop Hook：
+周期回顾：
 
 - 不解析输出状态尾巴；
 - 不要求模型输出隐藏状态字段；
 - 不创建候选状态；
 - 不自行运行 `cycle`；
-- 同一个到期回合最多请求一次。
+- 不产生额外模型继续；
+- 同一个到期回合最多注入一次。
 
 周期固定为 8，环境变量不能覆盖。
 
@@ -131,7 +132,7 @@ Hook 自身不会把 `ready` 改成 `proposed`。
 
 ## Claude Code
 
-`hooks/hooks.json` 是 Codex 与 Claude Code 共用的插件 Hook 入口。它使用同一组三个 wrapper 和 `${CLAUDE_PLUGIN_ROOT}`，没有第二套触发逻辑、Hook 清单或账本。
+`hooks/hooks.json` 是 Codex 与 Claude Code 共用的插件 Hook 入口。它使用同一组两个 wrapper 和 `${CLAUDE_PLUGIN_ROOT}`，没有第二套触发逻辑、Hook 清单或账本。
 
 `scripts/test_adapters.py` 和 `scripts/test_trigger_layer.py` 负责本地协议模拟。
 

@@ -7,7 +7,7 @@ Jinhua 是“精简 Skill + 单文件标准库 CLI + 薄宿主触发适配”。
 - `SKILL.md`：英文 active control plane，定义 Skill 被选中后的流程。
 - `SKILL.zh-CN.md`：中文解释，不替代控制面。
 - `scripts/jinhua.py`：唯一 CLI，包含确定性核心账本和触发层命令；两者必须保持边界。
-- `hooks/hooks.json`、`hooks/codex_*.py`：Codex 与 Claude Code 共用的三道触发闸门。
+- `hooks/hooks.json`、两个 `hooks/codex_*.py`：Codex 与 Claude Code 共用的三道逻辑触发闸门；第一道和第三道共用隐藏输入通道。
 - `references/`：CLI、数据政策、运行态 schema、Hook 和维护规则。
 - `adapters/`：其他宿主包装，不改变核心闭环。
 - `PROJECT_INDEX.md`：逐文件导航；`PROJECT_MAP*.md`：产品形态和目录概览。
@@ -51,7 +51,7 @@ Jinhua 是“精简 Skill + 单文件标准库 CLI + 薄宿主触发适配”。
 python scripts/test_core_loop.py
 python scripts/test_trigger_layer.py
 python scripts/test_adapters.py
-python -m py_compile scripts/jinhua.py hooks/codex_user_prompt_submit.py hooks/codex_post_tool_use.py hooks/codex_stop.py
+python -m py_compile scripts/jinhua.py hooks/codex_user_prompt_submit.py hooks/codex_post_tool_use.py
 python scripts/jinhua.py --project-root <project-root> validate
 git diff --check
 ```

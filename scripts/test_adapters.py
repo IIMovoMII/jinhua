@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_claude_hooks_json() -> None:
     data = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-    assert set(data["hooks"]) == {"UserPromptSubmit", "PostToolUse", "Stop"}
+    assert set(data["hooks"]) == {"UserPromptSubmit", "PostToolUse"}
     text = json.dumps(data)
     assert "${CLAUDE_PLUGIN_ROOT}" in text
     assert '"args"' not in text

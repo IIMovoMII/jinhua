@@ -10,9 +10,8 @@ The CLI is not a daemon. Hooks classify, count, remind, and deduplicate only. Th
 ## Codex Trigger Layer
 
 ```text
-UserPromptSubmit -> local correction classification + ready attention + turn count
-PostToolUse      -> invocation guard record
-Stop             -> fixed eight-turn periodic review + loop prevention
+UserPromptSubmit -> gate 1 correction/ready attention + gate 3 hidden eight-turn review
+PostToolUse      -> gate 2 invocation guard record
 ```
 
 The shared `hooks/hooks.json` invokes:
@@ -20,10 +19,9 @@ The shared `hooks/hooks.json` invokes:
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
 python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py"
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
 ```
 
-Each wrapper forwards stdin to the matching command in `scripts/jinhua.py`.
+Both wrappers forward stdin to the matching command in `scripts/jinhua.py`.
 The Codex manifest omits a redundant `hooks` override, so Codex discovers this official default path. Jinhua requires Codex 0.144.6 or newer for this package layout. The same file is also the Claude Code plugin hook entry.
 
 ## Project Root Resolution
@@ -39,9 +37,9 @@ UTF-8 BOM input is accepted. If the only fallback resolves to the installed Jinh
 
 ## Authoritative Hook Evidence
 
-Execution facts and Hook identity come only from documented, explicitly supported control fields. Codex and Claude Code expose fields such as `session_id`, `turn_id` or `prompt_id`, `cwd`, `stop_hook_active`, `tool_name`, and `tool_input.command` as control data.
+Execution facts and Hook identity come only from documented, explicitly supported control fields. Codex and Claude Code expose fields such as `session_id`, `turn_id` or `prompt_id`, `cwd`, `tool_name`, and `tool_input.command` as control data.
 
-Jinhua never infers execution, project identity, session identity, turn identity, or Stop recursion state from user prompts, documentation, tool responses, error logs, or arbitrary nested payload text. A command being mentioned is not evidence that it ran. Guard writes require both authoritative command evidence and authoritative session/turn identity. Unknown or incomplete payload shapes leave invocation-guard state unchanged until an explicit mapping and regression test are added.
+Jinhua never infers execution, project identity, session identity, or turn identity from user prompts, documentation, tool responses, error logs, or arbitrary nested payload text. A command being mentioned is not evidence that it ran. Guard writes require both authoritative command evidence and authoritative session/turn identity. Unknown or incomplete payload shapes leave invocation-guard state unchanged until an explicit mapping and regression test are added.
 
 ## Host Trust Boundary
 
@@ -62,7 +60,7 @@ The classifier is fully local. On a correction match, it emits one short `hookSp
 The same Hook:
 
 - counts unique user turns per hashed session;
-- marks a periodic check due every 8 turns;
+- injects one short periodic review into the current normal model call every 8 unique user turns;
 - reads existing local/global ready clusters and pending user gates;
 - may add one short ready-attention reminder.
 
@@ -86,33 +84,36 @@ It records lightweight runtime state under:
 <project-root>/.jinhua/runtime/invocation-guard.json
 ```
 
-The guard stores hashed session/turn ids, a reason digest, entry name, timestamp, recent events, turn counts, and periodic tickets. It is not an experience ledger.
+The guard stores hashed session/turn ids, a reason digest, entry name, timestamp, recent events, and turn counts. It is not an experience ledger.
 
 Guard decisions:
 
 - `allow`: first valid entry;
-- `already_handled`: Stop sees that the turn already entered Jinhua;
+- `already_handled`: a check path sees that the turn already entered Jinhua;
 - `skip_duplicate`: the same reason is repeated in the same turn;
 - `block_loop`: repeated entries indicate a loop.
 
 The first direct agent call remains allowed. Later Jinhua subcommands in the same turn belong to the same guarded workflow and do not create extra guard events; the guard only prevents duplicate trigger paths.
 
-## Gate 3: Stop Periodic Review
+## Gate 3: Hidden Periodic Review
 
-`codex-stop` has two responsibilities:
+Gate 3 shares `UserPromptSubmit` with Gate 1 but uses an independent condition:
 
-1. if `stop_hook_active` is true, pass through immediately;
-2. when the session's fixed eight-turn ticket is due, request one short continuation that scans the current turn and prior conversation for reusable workflow lessons.
+1. count unique `turn_id` values independently per session;
+2. on user turns 8, 16, 24, and so on, add one short review through `hookSpecificOutput.additionalContext`;
+3. scan the current turn and prior conversation inside the current normal model call;
+4. never inject twice for the same `turn_id`.
 
-Before requesting the continuation, Stop checks the invocation guard. If Jinhua already ran in the same turn, it consumes the periodic ticket and passes through.
+Codex's official implementation converts Stop Hook `decision:block + reason` into a separate `HookPrompt` conversation item, and the Stop path currently does not use `suppressOutput` to hide it. Jinhua therefore no longer registers a Stop Hook or exposes `codex-stop`.
 
-The Stop Hook:
+The periodic review:
 
 - does not parse an output-state tail;
 - does not require the model to emit hidden status fields;
 - does not create a candidate state;
 - does not run `cycle` itself;
-- issues at most one ticket per due turn.
+- creates no extra model continuation;
+- injects at most once per due turn.
 
 The interval is fixed at 8 and cannot be overridden by environment variables.
 
@@ -129,7 +130,7 @@ The Hook itself never changes `ready` to `proposed`.
 
 ## Claude Code
 
-`hooks/hooks.json` is the shared Codex and Claude Code plugin hook entry. It uses the same three wrapper scripts and `${CLAUDE_PLUGIN_ROOT}`; no second trigger implementation, hook file, or ledger exists.
+`hooks/hooks.json` is the shared Codex and Claude Code plugin hook entry. It uses the same two wrapper scripts and `${CLAUDE_PLUGIN_ROOT}`; no second trigger implementation, hook file, or ledger exists.
 
 Payload compatibility is checked through local protocol simulations in `scripts/test_adapters.py` and `scripts/test_trigger_layer.py`.
 

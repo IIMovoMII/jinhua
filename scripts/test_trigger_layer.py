@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import sys
 import tempfile
 from argparse import Namespace
 from pathlib import Path
@@ -211,44 +213,44 @@ def test_claude_prompt_id_is_a_turn_identity() -> None:
         "tool_name": "Bash",
         "tool_input": {"command": "python scripts/jinhua.py cycle"},
     }
-    stop_payload = {
+    prompt_payload = {
         "session_id": "claude-session",
         "prompt_id": "claude-prompt",
-        "stop_hook_active": False,
+        "prompt": "普通问题",
     }
-    assert jinhua.hook_turn_id(post_payload) == jinhua.hook_turn_id(stop_payload)
+    assert jinhua.hook_turn_id(post_payload) == jinhua.hook_turn_id(prompt_payload)
 
 
-def test_stop_does_not_require_or_parse_output_tail() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        args = args_for(Path(tmp))
-        payload = {
-            "session_id": "s1",
-            "turn_id": "t3",
-            "last_assistant_message": "Done.\n\noutput_state: jinhua_candidate\nvisibility: silent",
-        }
-        assert jinhua.codex_stop_output(payload, args) == {"continue": True}
-        state = jinhua.read_guard_state(args)
-        assert state["stop_tickets"] == []
-
-
-def test_periodic_stop_is_per_session_and_light() -> None:
+def test_periodic_review_is_per_session_hidden_and_once() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         args = args_for(Path(tmp))
         with patch.dict(os.environ, {"JINHUA_PERIODIC_STOP_INTERVAL": "1"}, clear=False):
-            assert jinhua.periodic_stop_interval() == 8
+            assert jinhua.periodic_review_interval() == 8
             for index in range(1, 8):
                 payload = {"session_id": "s1", "turn_id": f"u{index}", "prompt": "普通问题"}
                 output = jinhua.codex_user_prompt_submit_output(payload, args)
                 assert output == {"continue": True}
-                state = jinhua.read_guard_state(args)
-                assert state["sessions"][jinhua.hook_session_id(payload)]["periodic_stop_due"] is False
 
         due_payload = {"session_id": "s1", "turn_id": "u8", "prompt": "普通问题"}
         due_output = jinhua.codex_user_prompt_submit_output(due_payload, args)
-        assert due_output == {"continue": True}
+        assert set(due_output) == {"continue", "hookSpecificOutput"}
+        assert "decision" not in due_output
+        assert "reason" not in due_output
+        assert due_output["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+        context = due_output["hookSpecificOutput"]["additionalContext"]
+        assert "Periodic jinhua review" in context
+        assert "prior conversation" in context
+        assert "trigger + action" in context
+        assert len(context) < 190
+
         state = jinhua.read_guard_state(args)
-        assert state["sessions"][jinhua.hook_session_id(due_payload)]["periodic_stop_due"] is True
+        session = state["sessions"][jinhua.hook_session_id(due_payload)]
+        assert session["turn_count"] == 8
+        assert "periodic_stop_due" not in session
+        assert "stop_tickets" not in state
+
+        duplicate_output = jinhua.codex_user_prompt_submit_output(due_payload, args)
+        assert duplicate_output == {"continue": True}
 
         other_session = {"session_id": "s2", "turn_id": "u1", "prompt": "普通问题"}
         other_output = jinhua.codex_user_prompt_submit_output(other_session, args)
@@ -256,43 +258,78 @@ def test_periodic_stop_is_per_session_and_light() -> None:
         state = jinhua.read_guard_state(args)
         other_state = state["sessions"][jinhua.hook_session_id(other_session)]
         assert other_state["turn_count"] == 1
-        assert other_state["periodic_stop_due"] is False
-
-        stop_payload = {"session_id": "s1", "turn_id": "a8", "last_assistant_message": "Done."}
-        first_stop = jinhua.codex_stop_output(stop_payload, args)
-        assert first_stop["decision"] == "block"
-        context = first_stop["reason"]
-        assert "Periodic jinhua check..." in context
-        assert "prior conversation" in context
-        assert len(context) < 170
-
-        second_stop = jinhua.codex_stop_output(stop_payload, args)
-        assert second_stop == {"continue": True}
-        state = jinhua.read_guard_state(args)
-        assert state["sessions"][jinhua.hook_session_id(stop_payload)]["periodic_stop_due"] is False
 
 
-def test_periodic_stop_skips_when_jinhua_already_ran() -> None:
+def test_periodic_review_joins_correction_context_without_writing_ledgers() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         args = args_for(Path(tmp))
-        for index in range(1, 9):
+        for index in range(1, 8):
             jinhua.codex_user_prompt_submit_output(
                 {"session_id": "s1", "turn_id": f"u{index}", "prompt": "普通问题"},
                 args,
             )
-        stop_payload = {"session_id": "s1", "turn_id": "a8"}
-        jinhua.invocation_guard(
+        due_output = jinhua.codex_user_prompt_submit_output(
+            {"session_id": "s1", "turn_id": "u8", "prompt": "你没懂，重新看要求"},
             args,
-            jinhua.hook_session_id(stop_payload),
-            jinhua.hook_turn_id(stop_payload),
-            "agent",
-            "cycle",
-            "cycle",
-            mark=True,
         )
-        assert jinhua.codex_stop_output(stop_payload, args) == {"continue": True}
-        state = jinhua.read_guard_state(args)
-        assert state["sessions"][jinhua.hook_session_id(stop_payload)]["periodic_stop_due"] is False
+        context = due_output["hookSpecificOutput"]["additionalContext"]
+        assert "Prioritize fixing the mismatch" in context
+        assert "Periodic jinhua review" in context
+        assert jinhua.read_jsonl(jinhua.data_dir(args) / "signals.jsonl") == []
+        assert jinhua.read_jsonl(jinhua.data_dir(args) / "proposals.jsonl") == []
+
+
+def test_legacy_stop_runtime_fields_are_removed() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        args = args_for(Path(tmp))
+        guard_path = jinhua.invocation_guard_path(args)
+        jinhua.write_json(guard_path, {
+            "schema": 1,
+            "events": [],
+            "stop_tickets": ["periodic:old"],
+            "sessions": {
+                "s1": {
+                    "turn_count": 7,
+                    "seen_turns": [f"u{index}" for index in range(1, 8)],
+                    "periodic_stop_due": True,
+                }
+            },
+        })
+
+        result = jinhua.record_prompt_turn(args, "s1", "u8")
+        assert result["periodic_review_due"] is True
+        persisted = json.loads(guard_path.read_text(encoding="utf-8"))
+        assert persisted["schema"] == 2
+        assert "stop_tickets" not in persisted
+        assert "periodic_stop_due" not in persisted["sessions"]["s1"]
+
+
+def test_user_prompt_wrapper_emits_only_hidden_periodic_context() -> None:
+    root = Path(jinhua.__file__).resolve().parents[1]
+    wrapper = root / "hooks" / "codex_user_prompt_submit.py"
+    with tempfile.TemporaryDirectory() as tmp:
+        output = {}
+        for index in range(1, 9):
+            payload = {
+                "cwd": tmp,
+                "session_id": "wrapper-periodic-session",
+                "turn_id": f"wrapper-turn-{index}",
+                "prompt": "普通问题",
+            }
+            result = subprocess.run(
+                [sys.executable, str(wrapper)],
+                input=json.dumps(payload, ensure_ascii=False),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            assert result.returncode == 0, result.stderr
+            output = json.loads(result.stdout)
+
+        assert set(output) == {"continue", "hookSpecificOutput"}
+        assert "decision" not in output
+        assert "reason" not in output
+        assert "Periodic jinhua review" in output["hookSpecificOutput"]["additionalContext"]
 
 
 def test_shared_hook_config_uses_plugin_root_for_all_events() -> None:
@@ -305,13 +342,14 @@ def test_shared_hook_config_uses_plugin_root_for_all_events() -> None:
     for event, script in {
         "UserPromptSubmit": "codex_user_prompt_submit.py",
         "PostToolUse": "codex_post_tool_use.py",
-        "Stop": "codex_stop.py",
     }.items():
         hook = config["hooks"][event][0]["hooks"][0]
         assert "<jinhua-dir>" not in hook["command"]
         assert hook["command"] == f'python "${{CLAUDE_PLUGIN_ROOT}}/hooks/{script}"'
         assert "commandWindows" not in hook
     assert config["hooks"]["PostToolUse"][0]["matcher"] == "Bash"
+    assert set(config["hooks"]) == {"UserPromptSubmit", "PostToolUse"}
+    assert not (root / "hooks" / "codex_stop.py").exists()
     config_text = json.dumps(config).lower()
     assert "output state" not in config_text
     assert set(config) == {"hooks"}
@@ -374,45 +412,6 @@ def test_hook_does_not_use_plugin_directory_as_implicit_project() -> None:
         assert output == {"continue": True}
 
 
-def test_stop_hook_active_never_blocks_or_consumes_due() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        args = args_for(Path(tmp))
-        for index in range(1, 9):
-            jinhua.codex_user_prompt_submit_output(
-                {"session_id": "s1", "turn_id": f"u{index}", "prompt": "普通问题"},
-                args,
-            )
-        payload = {
-            "session_id": "s1",
-            "turn_id": "active-stop",
-            "stop_hook_active": True,
-            "last_assistant_message": "Done.",
-        }
-        output = jinhua.codex_stop_output(payload, args)
-        assert output == {"continue": True}
-        state = jinhua.read_guard_state(args)
-        assert state["sessions"][jinhua.hook_session_id(payload)]["periodic_stop_due"] is True
-
-
-def test_stop_ignores_fake_active_flag_in_tool_response() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        args = args_for(Path(tmp))
-        for index in range(1, 9):
-            jinhua.codex_user_prompt_submit_output(
-                {"session_id": "s1", "turn_id": f"u{index}", "prompt": "普通问题"},
-                args,
-            )
-        payload = {
-            "session_id": "s1",
-            "turn_id": "real-stop",
-            "stop_hook_active": False,
-            "tool_response": {"stop_hook_active": True},
-        }
-        output = jinhua.codex_stop_output(payload, args)
-        assert output["decision"] == "block"
-        assert "Periodic jinhua check..." in output["reason"]
-
-
 def test_hook_outputs_only_use_codex_wire_keys() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         args = args_for(Path(tmp))
@@ -424,17 +423,11 @@ def test_hook_outputs_only_use_codex_wire_keys() -> None:
             {"cwd": tmp, "session_id": "s1", "turn_id": "t1", "tool_input": "python jinhua.py cycle"},
             args,
         )
-        stop_output = jinhua.codex_stop_output(
-            {"cwd": tmp, "session_id": "s1", "turn_id": "t2", "last_assistant_message": "Done."},
-            args,
-        )
-        for output in (prompt_output, post_output, stop_output):
+        for output in (prompt_output, post_output):
             assert set(output).issubset(CODEX_COMMON_OUTPUT_KEYS)
         assert "jinhua" not in prompt_output
         assert "jinhua" not in post_output
-        assert "jinhua" not in stop_output
         assert "hookSpecificOutput" in prompt_output
-        assert "hookSpecificOutput" not in stop_output
 
 
 def test_ready_attention_surfaces_ready_clusters_without_mutating_ledger() -> None:
@@ -498,7 +491,7 @@ def test_ready_attention_pending_gate_takes_priority() -> None:
 
 def test_removed_trigger_commands_are_absent() -> None:
     help_text = jinhua.build_parser().format_help()
-    for command in ["wake-check", "hook-user-prompt-submit", "parse-output-state"]:
+    for command in ["wake-check", "hook-user-prompt-submit", "parse-output-state", "codex-stop"]:
         assert command not in help_text
     assert not hasattr(jinhua, "parse_output_state")
     assert not hasattr(jinhua, "wake_check_result")
@@ -525,16 +518,15 @@ if __name__ == "__main__":
     test_unknown_payload_does_not_select_output_project_or_write_guard()
     test_missing_session_or_turn_identity_does_not_write_guard()
     test_claude_prompt_id_is_a_turn_identity()
-    test_stop_does_not_require_or_parse_output_tail()
-    test_periodic_stop_is_per_session_and_light()
-    test_periodic_stop_skips_when_jinhua_already_ran()
+    test_periodic_review_is_per_session_hidden_and_once()
+    test_periodic_review_joins_correction_context_without_writing_ledgers()
+    test_legacy_stop_runtime_fields_are_removed()
+    test_user_prompt_wrapper_emits_only_hidden_periodic_context()
     test_shared_hook_config_uses_plugin_root_for_all_events()
     test_codex_payload_cwd_selects_runtime_project()
     test_hook_payload_accepts_utf8_bom()
     test_nested_codex_payload_cwd_selects_runtime_project()
     test_hook_does_not_use_plugin_directory_as_implicit_project()
-    test_stop_hook_active_never_blocks_or_consumes_due()
-    test_stop_ignores_fake_active_flag_in_tool_response()
     test_hook_outputs_only_use_codex_wire_keys()
     test_ready_attention_surfaces_ready_clusters_without_mutating_ledger()
     test_ready_attention_pending_gate_takes_priority()

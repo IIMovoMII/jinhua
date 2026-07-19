@@ -2115,6 +2115,15 @@ def ready_attention_context(args: argparse.Namespace, session_id: str, turn_stat
     return result
 
 
+def periodic_review_context(turn_state: dict) -> str:
+    if not turn_state.get("periodic_review_due"):
+        return ""
+    return (
+        "Periodic jinhua review: scan this turn and prior conversation. "
+        "If a concrete reusable error or method has trigger + action, use jinhua rules; otherwise stay silent."
+    )
+
+
 def codex_user_prompt_submit_output(payload: dict, args: argparse.Namespace | None = None) -> dict:
     prompt = extract_hook_prompt(payload)
     result = classify_user_correction(prompt)
@@ -2130,7 +2139,11 @@ def codex_user_prompt_submit_output(payload: dict, args: argparse.Namespace | No
         turn_state = record_prompt_turn(args, session_id, turn_id)
         ready_attention = ready_attention_context(args, session_id, turn_state)
     output: dict = {"continue": True}
-    context = join_contexts(result["internal_context"], ready_attention.get("additional_context", ""))
+    context = join_contexts(
+        result["internal_context"],
+        ready_attention.get("additional_context", ""),
+        periodic_review_context(turn_state),
+    )
     if not context:
         return output
     output["hookSpecificOutput"] = {
@@ -2183,15 +2196,6 @@ def authoritative_string(
     return value.strip() if isinstance(value, str) and value.strip() else ""
 
 
-def authoritative_bool(
-    payload: object,
-    keys: tuple[str, ...],
-    parent_paths: tuple[tuple[str, ...], ...],
-) -> bool:
-    value = authoritative_value(payload, keys, parent_paths)
-    return value if isinstance(value, bool) else False
-
-
 def hook_session_id(payload: dict) -> str:
     found = authoritative_string(payload, HOOK_SESSION_ID_KEYS, HOOK_METADATA_PARENT_PATHS)
     if found:
@@ -2227,7 +2231,7 @@ def hook_identity_available(payload: dict) -> bool:
     return bool(session_evidence and (turn_evidence or extract_hook_prompt(payload)))
 
 
-def periodic_stop_interval() -> int:
+def periodic_review_interval() -> int:
     return DEFAULT_PERIODIC_STOP_INTERVAL
 
 
@@ -2353,17 +2357,20 @@ def jinhua_entry_from_payload(payload: dict) -> str:
 
 
 def default_guard_state() -> dict:
-    return {"schema": 1, "events": [], "stop_tickets": [], "sessions": {}}
+    return {"schema": 2, "events": [], "sessions": {}}
 
 
 def read_guard_state(args: argparse.Namespace) -> dict:
     state = read_json(invocation_guard_path(args), default_guard_state())
+    state["schema"] = 2
     if not isinstance(state.get("events"), list):
         state["events"] = []
-    if not isinstance(state.get("stop_tickets"), list):
-        state["stop_tickets"] = []
+    state.pop("stop_tickets", None)
     if not isinstance(state.get("sessions"), dict):
         state["sessions"] = {}
+    for session in state["sessions"].values():
+        if isinstance(session, dict):
+            session.pop("periodic_stop_due", None)
     return state
 
 
@@ -2376,7 +2383,6 @@ def write_guard_state(args: argparse.Namespace, state: dict) -> None:
         if timestamp is None or timestamp >= cutoff:
             events.append(event)
     state["events"] = events[-100:]
-    state["stop_tickets"] = list(dict.fromkeys(state.get("stop_tickets", [])))[-100:]
     sessions = state.get("sessions", {})
     if isinstance(sessions, dict):
         state["sessions"] = dict(list(sessions.items())[-100:])
@@ -2386,31 +2392,17 @@ def write_guard_state(args: argparse.Namespace, state: dict) -> None:
 def record_prompt_turn(args: argparse.Namespace, session_id: str, turn_id: str) -> dict:
     state = read_guard_state(args)
     sessions = state.setdefault("sessions", {})
-    session = sessions.setdefault(session_id, {"turn_count": 0, "seen_turns": [], "periodic_stop_due": False})
+    session = sessions.setdefault(session_id, {"turn_count": 0, "seen_turns": []})
     seen_turns = session.setdefault("seen_turns", [])
-    if turn_id not in seen_turns:
+    new_turn = turn_id not in seen_turns
+    if new_turn:
         seen_turns.append(turn_id)
         session["turn_count"] = int(session.get("turn_count", 0)) + 1
-    interval = periodic_stop_interval()
-    due = bool(interval and session["turn_count"] > 0 and session["turn_count"] % interval == 0)
-    if due:
-        session["periodic_stop_due"] = True
+    interval = periodic_review_interval()
+    due = bool(new_turn and interval and session["turn_count"] > 0 and session["turn_count"] % interval == 0)
     session["seen_turns"] = seen_turns[-50:]
     write_guard_state(args, state)
-    return {"turn_count": session["turn_count"], "interval": interval, "periodic_stop_due": bool(session.get("periodic_stop_due"))}
-
-
-def consume_periodic_stop_due(args: argparse.Namespace, session_id: str) -> dict:
-    state = read_guard_state(args)
-    session = state.get("sessions", {}).get(session_id, {})
-    due = bool(session.get("periodic_stop_due"))
-    turn_count = int(session.get("turn_count", 0) or 0)
-    interval = periodic_stop_interval()
-    if due:
-        session["periodic_stop_due"] = False
-        state.setdefault("sessions", {})[session_id] = session
-        write_guard_state(args, state)
-    return {"due": due, "turn_count": turn_count, "interval": interval}
+    return {"turn_count": session["turn_count"], "interval": interval, "periodic_review_due": due}
 
 
 def guard_reason_digest(reason: str) -> str:
@@ -2486,46 +2478,6 @@ def command_codex_post_tool_use(args: argparse.Namespace) -> None:
     payload = read_hook_payload(read_hook_stdin())
     apply_payload_project_root(args, payload)
     output = codex_post_tool_use_output(payload, args)
-    print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
-
-
-def stop_ticket_once(args: argparse.Namespace, session_id: str, turn_id: str, kind: str = "periodic") -> bool:
-    state = read_guard_state(args)
-    key = f"{kind}:{session_id}:{turn_id}"
-    if key in state.get("stop_tickets", []):
-        return False
-    state.setdefault("stop_tickets", []).append(key)
-    write_guard_state(args, state)
-    return True
-
-
-def codex_stop_output(payload: dict, args: argparse.Namespace) -> dict:
-    output: dict = {"continue": True}
-    if getattr(args, "_jinhua_hook_runtime_disabled", False) or not hook_identity_available(payload):
-        return output
-    session_id = hook_session_id(payload)
-    turn_id = hook_turn_id(payload)
-    if authoritative_bool(payload, ("stop_hook_active", "stopHookActive"), HOOK_TOOL_PARENT_PATHS):
-        return output
-    periodic = consume_periodic_stop_due(args, session_id)
-    if periodic["due"]:
-        guard = invocation_guard(args, session_id, turn_id, "stop", "periodic", "periodic", mark=False)
-        if guard["decision"] != "allow":
-            return output
-        if stop_ticket_once(args, session_id, turn_id, "periodic"):
-            output["decision"] = "block"
-            output["reason"] = (
-                "Periodic jinhua check... scan this turn and prior conversation for reusable workflow lessons. "
-                "If found, use jinhua rules; otherwise stay silent."
-            )
-        return output
-    return output
-
-
-def command_codex_stop(args: argparse.Namespace) -> None:
-    payload = read_hook_payload(read_hook_stdin())
-    apply_payload_project_root(args, payload)
-    output = codex_stop_output(payload, args)
     print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
 
 
@@ -3614,13 +3566,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     codex_post_tool_parser.add_argument("--pretty", action="store_true", help="Pretty-print hook JSON output.")
     codex_post_tool_parser.set_defaults(func=command_codex_post_tool_use)
-
-    codex_stop_parser = subparsers.add_parser(
-        "codex-stop",
-        help="Codex Stop trigger gate: fixed eight-turn periodic check",
-    )
-    codex_stop_parser.add_argument("--pretty", action="store_true", help="Pretty-print hook JSON output.")
-    codex_stop_parser.set_defaults(func=command_codex_stop)
 
     guard_parser = subparsers.add_parser("guard", help="Run the jinhua invocation guard")
     guard_parser.add_argument("--session-id", default="")

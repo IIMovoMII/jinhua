@@ -84,7 +84,7 @@ Hook 不能迁移核心 schema、写信号、创建提案、记录确认结果�
 python scripts/test_core_loop.py
 python scripts/test_trigger_layer.py
 python scripts/test_adapters.py
-python -m py_compile scripts/jinhua.py hooks/codex_user_prompt_submit.py hooks/codex_post_tool_use.py hooks/codex_stop.py
+python -m py_compile scripts/jinhua.py hooks/codex_user_prompt_submit.py hooks/codex_post_tool_use.py
 python scripts/jinhua.py --project-root <project-root> validate
 git diff --check
 ```

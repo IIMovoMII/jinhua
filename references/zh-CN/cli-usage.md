@@ -25,13 +25,11 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 python <jinhua-dir>/scripts/jinhua.py classify-input --text "你理解错了工作流" --json
 python <jinhua-dir>/scripts/jinhua.py codex-user-prompt-submit
 python <jinhua-dir>/scripts/jinhua.py codex-post-tool-use
-python <jinhua-dir>/scripts/jinhua.py codex-stop
 ```
 
 - `classify-input` 返回 `none`、`possible_user_correction` 或 `strong_user_correction`。
-- `codex-user-prompt-submit` 在本地分类、统计不同用户回合，并按需注入极短纠错/就绪提醒。
+- `codex-user-prompt-submit` 在本地分类、统计不同用户回合，按需注入极短纠错/就绪提醒，并在每 8 个新回合注入一次隐藏周期回顾。
 - `codex-post-tool-use` 记录本轮已经进入 Jinhua，防止重复。
-- `codex-stop` 只负责固定每 8 轮的周期检查；`stop_hook_active` 为真时始终放行。
 
 Hook 不迁移核心数据，不写 signals/proposals，也不修改文件。
 

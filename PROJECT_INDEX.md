@@ -34,17 +34,16 @@
 | --- | --- |
 | `scripts/jinhua.py` | 唯一 CLI：初始化、迁移、信号、聚类、全局导入、完整提案、确认结果纯记账、状态和验证。 |
 | `scripts/test_core_loop.py` | 标准库端到端测试：阈值、提案、确认门、冷却、全局路径、迁移和废弃接口。 |
-| `scripts/test_trigger_layer.py` | 纠错分类、项目根解析、ready-attention、调用保护、每会话 8 轮和 Stop 防循环。 |
+| `scripts/test_trigger_layer.py` | 纠错分类、项目根解析、ready-attention、调用保护和每会话 8 轮隐藏回顾。 |
 | `scripts/test_adapters.py` | Claude Code、OpenClaw、Hermes、TRAE、WorkBuddy 包装冒烟测试。 |
 
 ## Codex 和宿主适配
 
 | 文件 | 职责 |
 | --- | --- |
-| `hooks/hooks.json` | Codex 与 Claude Code 共用的三个 command Hook 定义，也是 manifest 指向的唯一 Hook 入口。 |
-| `hooks/codex_user_prompt_submit.py` | 第一道闸门薄 wrapper。 |
+| `hooks/hooks.json` | Codex 与 Claude Code 共用的两个 command Hook 定义，也是默认发现的唯一 Hook 入口。 |
+| `hooks/codex_user_prompt_submit.py` | 第一道纠错/就绪提醒与第三道固定周期回顾的薄 wrapper。 |
 | `hooks/codex_post_tool_use.py` | 第二道调用保护薄 wrapper。 |
-| `hooks/codex_stop.py` | 第三道固定周期回顾薄 wrapper。 |
 | `skills/jinhua/SKILL.md` | Codex 插件内薄 Skill 入口，委托给根目录 `SKILL.md`。 |
 | `adapters/README.md` | 各宿主支持范围和边界。 |
 | `adapters/openclaw/openclaw.plugin.json` | OpenClaw 插件包装清单。 |

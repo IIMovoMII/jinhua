@@ -62,7 +62,7 @@ Jinhua 只记录脱敏后的方法论证据，不保存用户记忆、项目记�
 
 ## Hook 边界
 
-Hook 只能写 `.jinhua/runtime/invocation-guard.json`，用途限于本地分类辅助、不同用户回合计数、周期票据和同轮去重。
+Hook 只能写 `.jinhua/runtime/invocation-guard.json`，用途限于本地分类辅助、不同用户回合计数、固定周期判断和同轮去重。
 
 Hook 不能：
 

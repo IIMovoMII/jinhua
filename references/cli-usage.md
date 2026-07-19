@@ -23,13 +23,11 @@ Useful options:
 python <jinhua-dir>/scripts/jinhua.py classify-input --text "you misunderstood the workflow" --json
 python <jinhua-dir>/scripts/jinhua.py codex-user-prompt-submit
 python <jinhua-dir>/scripts/jinhua.py codex-post-tool-use
-python <jinhua-dir>/scripts/jinhua.py codex-stop
 ```
 
 - `classify-input` returns `none`, `possible_user_correction`, or `strong_user_correction`.
-- `codex-user-prompt-submit` classifies locally, counts unique turns, and may inject short correction/ready attention.
+- `codex-user-prompt-submit` classifies locally, counts unique turns, may inject short correction/ready attention, and adds one hidden periodic review every 8 new turns.
 - `codex-post-tool-use` records same-turn Jinhua entry for duplicate protection.
-- `codex-stop` performs only the fixed eight-turn periodic check and always passes when `stop_hook_active` is true.
 
 Hooks never migrate core data, write signals/proposals, or edit files.
 

@@ -157,7 +157,7 @@ Schema version: `2.0`. Stores last scan time/counts, last ready count, last prop
 
 ## Trigger Runtime
 
-`.jinhua/runtime/invocation-guard.json` is not an experience ledger. It stores hashed sessions/turns, recent Jinhua invocation events, periodic Stop tickets, and per-session turn counts. It may be written by Hooks; core migrations do not run from Hooks.
+`.jinhua/runtime/invocation-guard.json` is not an experience ledger. Schema version `2` stores only hashed sessions/turns, recent Jinhua invocation events, and per-session turn counts. The eighth-turn condition is computed from each new `turn_id` instead of a persisted Stop ticket. Reading old runtime removes `stop_tickets` and `periodic_stop_due`; Hooks may write this file, but core migrations do not run from Hooks.
 
 ## 2.0 Migration
 

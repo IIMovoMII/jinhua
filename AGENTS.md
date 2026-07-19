@@ -1,7 +1,7 @@
 # Jinhua Agent Instructions
 
 - 先读 `PROJECT_RULES.md`；需要定位文件时读 `PROJECT_INDEX.md`，只读取与当前任务相关的 active 文件。
-- `SKILL.md` 是控制面，`scripts/jinhua.py` 是唯一 CLI；核心测试看 `scripts/test_core_loop.py`，Codex/Claude 触发层看 `hooks/hooks.json`、三个 `hooks/codex_*.py` 和 `scripts/test_trigger_layer.py`。
+- `SKILL.md` 是控制面，`scripts/jinhua.py` 是唯一 CLI；核心测试看 `scripts/test_core_loop.py`，Codex/Claude 触发层看 `hooks/hooks.json`、两个 `hooks/codex_*.py` 和 `scripts/test_trigger_layer.py`。
 - `.jinhua/`、`global-data/` 是运行态，`.archive/` 和 `__pycache__/` 不是 active source；除非任务明确涉及历史恢复，否则不要读取或提交它们。
 - 保持 `signals -> clusters -> proposals -> user gate`、placement ladder 和用户确认门不被绕过；触发层可以独立优化，但不能新增第二套经验账本。
 - 不记录用户原文、凭证、私人路径或敏感项目标识；不要把运行态打进插件包。

@@ -138,7 +138,7 @@ schema 版本是 `2.0`。保存最后扫描时间、项目/信号/就绪统计�
 
 ## 触发层运行态
 
-`.jinhua/runtime/invocation-guard.json` 不是经验账本。它只保存哈希化会话/回合、近期 Jinhua 调用、周期 Stop 票据和每个会话的回合数。Hook 可以写这个文件，但不会触发核心账本迁移。
+`.jinhua/runtime/invocation-guard.json` 不是经验账本。schema 版本是 `2`，只保存哈希化会话/回合、近期 Jinhua 调用和每个会话的回合数。每 8 轮是否触发由新 `turn_id` 和回合数即时计算，不再保存 Stop 票据。读取旧 schema 时会移除 `stop_tickets` 和 `periodic_stop_due`；Hook 可以写这个文件，但不会触发核心账本迁移。
 
 ## 2.0 自动迁移
 

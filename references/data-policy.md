@@ -60,7 +60,7 @@ Do not copy raw local evidence into global records. When `--project-id` or `JINH
 
 ## Hook Boundary
 
-Hooks may write only `.jinhua/runtime/invocation-guard.json` for local classification support, unique-turn counting, periodic tickets, and same-turn deduplication.
+Hooks may write only `.jinhua/runtime/invocation-guard.json` for local classification support, unique-turn counting, fixed periodic checks, and same-turn deduplication.
 
 Hooks must not:
 

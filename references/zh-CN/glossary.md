@@ -9,9 +9,8 @@ Jinhua 的命令、参数、JSON 字段、operator id 和 placement id 必须保
 | `init` | 初始化 | 创建项目本地运行态。 |
 | `cycle` | 自动检查点 | 初始化或迁移、汇总本地/全局状态、导入跨项目证据、显示就绪聚类和待确认门。 |
 | `classify-input` | 输入纠错分类 | 本地判断输入属于无纠错、可能纠错还是强纠错。 |
-| `codex-user-prompt-submit` | 第一道闸门 | 本地分类、就绪提醒和每会话回合计数。 |
+| `codex-user-prompt-submit` | 第一道与第三道闸门 | 本地分类、就绪提醒、每会话回合计数，以及每 8 轮一次的隐藏周期回顾。 |
 | `codex-post-tool-use` | 第二道闸门 | 记录本轮已经进入 Jinhua，防止重复。 |
-| `codex-stop` | 第三道闸门 | 固定每 8 轮请求一次极短历史回顾，并防止 Stop 循环。 |
 | `guard` | 调用保护门 | 手动查看或记录一次调用保护判断。 |
 | `log-signal` | 记录信号 | 记录一条已经通过写入门的方法经验。 |
 | `list-clusters` | 查看本地聚类 | 查看同类信号的数量、强度和状态。 |

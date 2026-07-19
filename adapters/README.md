@@ -4,7 +4,7 @@ Adapters expose the canonical Jinhua Skill and CLI without changing the core loo
 
 | Host | Adapter | Scope |
 | --- | --- | --- |
-| Codex and Claude Code | `hooks/hooks.json` | Shared UserPromptSubmit, PostToolUse, and Stop hooks using one wrapper set. |
+| Codex and Claude Code | `hooks/hooks.json` | Shared UserPromptSubmit and PostToolUse hooks; the first input hook also carries the hidden eight-turn review. |
 | OpenClaw | `adapters/openclaw/openclaw.plugin.json` + Skill | Plugin/Skill packaging. |
 | Hermes | `adapters/hermes/skills/jinhua/SKILL.md` | Agent Skills-compatible wrapper. |
 | TRAE | `adapters/trae/skills/jinhua/SKILL.md` | Agent Skills-compatible wrapper. |

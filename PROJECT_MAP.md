@@ -43,8 +43,7 @@ jinhua/
 |-- hooks/
 |   |-- hooks.json
 |   |-- codex_user_prompt_submit.py
-|   |-- codex_post_tool_use.py
-|   `-- codex_stop.py
+|   `-- codex_post_tool_use.py
 |-- skills/jinhua/
 |   `-- SKILL.md
 |-- adapters/
@@ -82,7 +81,7 @@ There is no repository seed-data directory in 2.0. Runtime data is created only 
 
 ## Current CLI Surface
 
-`init`, `cycle`, `global-cycle`, `classify-input`, `codex-user-prompt-submit`, `codex-post-tool-use`, `codex-stop`, `guard`, `log-signal`, `list-clusters`, `propose`, `apply-proposal`, `reject-proposal`, `global-propose`, `global-apply`, `global-reject`, `status`, `global-status`, and `validate`.
+`init`, `cycle`, `global-cycle`, `classify-input`, `codex-user-prompt-submit`, `codex-post-tool-use`, `guard`, `log-signal`, `list-clusters`, `propose`, `apply-proposal`, `reject-proposal`, `global-propose`, `global-apply`, `global-reject`, `status`, `global-status`, and `validate`.
 
 Apply commands are ledger-only. Proposal commands require a concrete target, complete Markdown patch, and concrete risk.
 

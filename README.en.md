@@ -66,7 +66,7 @@ possible_user_correction
 strong_user_correction
 ```
 
-On a match it adds one short internal hint to the normal model call. It also reads existing ready clusters and pending gates and counts unique user turns per session. It never runs `cycle`, migrates core data, writes signals/proposals, or stores the user's original prompt.
+On a match it adds one short internal hint to the normal model call. It also reads existing ready clusters and pending gates, counts unique user turns per session, and carries the third fixed periodic review. It never runs `cycle`, migrates core data, writes signals/proposals, or stores the user's original prompt.
 
 ### Gate 2: Direct Agent Call And Invocation Guard
 
@@ -81,11 +81,11 @@ skip_duplicate
 block_loop
 ```
 
-### Gate 3: Fixed Eight-Turn Review
+### Gate 3: Hidden Eight-Turn Review
 
-`Stop` requests one short review every 8 unique user turns in each session. The review covers the current turn and prior conversation. Ordinary turns run local code only; one extra model continuation occurs only when the interval is due.
+The same `UserPromptSubmit` Hook adds one short review to the current normal model call through `additionalContext` every 8 unique user turns in a session. The review covers the current turn and prior conversation, and a duplicate `turn_id` is not injected twice.
 
-Stop no longer requires or parses an output-state tail. It passes through when `stop_hook_active` is set or when Jinhua already ran in that turn, preventing loops and duplicate calls.
+Codex converts a Stop Hook `decision:block + reason` into a user-visible `HookPrompt`, so Jinhua no longer transports periodic reminders through Stop. The third gate remains fixed and enforced without an extra model continuation or user-visible internal prompt.
 
 All three gates only classify, count, remind, and deduplicate. They never write signals, create proposals, or edit rules.
 
@@ -276,7 +276,7 @@ Outside Codex and Claude Code, automatic triggering depends on host support. Ada
 
 - Input classification, ready attention, turn counting, and invocation guarding are local and add no separate model call.
 - Ordinary turns do not load the full Jinhua Skill or run `cycle`.
-- The fixed eight-turn fallback requests at most one short periodic continuation.
+- Every eighth turn adds one short internal review to the existing normal model call; it does not create a separate continuation.
 - Once selected, the trimmed `SKILL.md` is the only automatic control surface; references are read on demand.
 - There is no forced output tail, daemon, external database, or vector retrieval.
 
