@@ -2,6 +2,37 @@
 
 > 本文件是中文更新说明；英文辅助版本见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 2026-07-19 项目导航与归档边界
+
+- 新增简短的智能体说明、项目规范和逐文件索引，让后续任务只读取相关 active 文件，不扫描运行态和历史文件。
+- 已把被新触发层替代的 `claude-codex-hooks.json` 和 Python 生成缓存移到本地、被忽略的 `.archive/`。
+- 保留 `.jinhua/` 和 `global-data/`，因为它们是正在使用的运行态，不是过时文件。
+
+## 2026-07-19 Codex Hook 信任与运行验证
+
+- 已确认 Codex 能通过插件清单发现 Jinhua 的三个触发 Hook，并把命令解析到 `${CLAUDE_PLUGIN_ROOT}` 下。
+- 明确宿主侧信任边界：Hook 即使已经被发现，只要状态是 `modified` 或 `untrusted`，就不会真正执行；插件更新后必须由宿主信任当前 Hook 内容。
+- 已用一次不修改文件的真实 Codex 运行验证：只新增按会话计数的触发层运行态，`signals`、聚类和提案数据保持不变。
+
+## 2026-07-19 Codex Hook 协议兼容
+
+- 三个 Codex Hook 的 stdout 现在严格符合宿主协议，不再输出内部 `jinhua` 状态字段。
+- Stop 提醒改用 Codex 支持的 `decision: block + reason`，并显式处理 `stop_hook_active`，用运行态 ticket 防止循环。
+- Windows Hook 命令统一使用 Codex 会替换的 `${CLAUDE_PLUGIN_ROOT}`，不再依赖 shell 专用变量语法。
+
+## 2026-07-19 Codex Hook 项目根目录解析
+
+- 修复三个 Codex Hook 命令，把插件根目录变量用于运行时解析，不再把 `<jinhua-dir>` 当成真实路径执行。
+- 项目根目录解析支持常见的嵌套 payload 字段和项目目录环境变量。
+- 兼容 Windows Hook stdin 可能带有的 UTF-8 BOM，避免因此丢失项目路径。
+- 如果无法得到可信的项目根目录，Hook 不会把运行态写进已安装插件目录。
+
+## 2026-06-27 Agent 适配层
+
+- 新增 `hooks/hooks.json`，作为 Claude Code plugin hook 适配，不改核心插件 manifest。
+- 在 `adapters/` 下新增 OpenClaw、Hermes、TRAE、WorkBuddy 适配。
+- 新增 adapter 冒烟测试，确保宿主包装和 jinhua 核心账本分离。
+
 ## 2026-06-27 就绪提醒桥
 
 - 给 `codex-user-prompt-submit` 增加只读就绪提醒检查。

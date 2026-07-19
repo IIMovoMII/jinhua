@@ -4,6 +4,8 @@
 
 这个项目的形态是：一个 Skill，加一个单文件 CLI。除非真实使用证明有必要，否则不要把它做大。
 
+日常定位先读根目录的 `AGENTS.md`、`PROJECT_RULES.md` 和 `PROJECT_INDEX.md`。本文件保存较完整的维护规则；只有文件归属、目录结构或项目规范真的变化时，才同步更新根目录导航文件。
+
 ## 文件规则
 
 - `SKILL.md` 是智能体（Agent）实际读取的控制面，不是知识库。
@@ -12,6 +14,8 @@
 - `README.en.md` 是英文辅助文档。
 - `PROJECT_MAP.md` 是英文项目地图。
 - `PROJECT_MAP.zh-CN.md` 是中文项目地图。
+- `PROJECT_INDEX.md` 是逐文件中文导航索引。
+- `PROJECT_RULES.md` 是简短的项目规范。
 - `references/` 主目录保持精简。
 - `references/zh-CN/` 保存中文说明和术语表。
 - 能放进现有文件的内容，不要新建 reference 文件。
@@ -72,5 +76,6 @@ CLI 不能做：
 - `skill.zip`
 - `__pycache__/`
 - 本地权限文件
+- `.archive/`
 
 结构（schema）变更必须同时更新英文和中文结构文档，并通过 `validate`。

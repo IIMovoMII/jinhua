@@ -2,6 +2,8 @@
 
 This project is a small Skill + single-file CLI. Keep it that way unless real usage proves otherwise.
 
+For everyday navigation, read the short root files `AGENTS.md`, `PROJECT_RULES.md`, and `PROJECT_INDEX.md`. This reference is the detailed maintenance policy; update the root navigation files only when ownership, structure, or project rules actually change.
+
 ## File Rules
 
 - `SKILL.md` is the control plane, not a knowledge base.
@@ -10,6 +12,8 @@ This project is a small Skill + single-file CLI. Keep it that way unless real us
 - `README.md` is the default Chinese user-facing usage guide.
 - `README.en.md` is the English mirror.
 - `PROJECT_MAP.md` is the navigation map.
+- `PROJECT_INDEX.md` is the file-by-file navigation index.
+- `PROJECT_RULES.md` is the short project convention file.
 - `references/` must stay under 8 files.
 - Do not add a new reference file if an existing one can hold the content.
 
@@ -68,5 +72,6 @@ Do not package:
 - `skill.zip`
 - `__pycache__/`
 - local permission files
+- `.archive/`
 
 Schema changes must update `references/operator-json-schema.md` and pass `validate`.

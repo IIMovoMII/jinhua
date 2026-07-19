@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## 2026-07-19 Project Navigation And Archive Boundary
+
+- Added short agent instructions, project rules, and a file-by-file project index so future work can load the relevant active files without scanning runtime data or history.
+- Moved the superseded `claude-codex-hooks.json` wrapper and generated Python caches to the local ignored `.archive/` directory.
+- Kept `.jinhua/` and `global-data/` in place because they are active runtime state, not obsolete files.
+
+## 2026-07-19 Codex Hook Trust And Runtime Verification
+
+- Confirmed that Codex discovers all three Jinhua trigger hooks through the plugin manifest and resolves their commands from `${CLAUDE_PLUGIN_ROOT}`.
+- Documented the host-side trust boundary: a discovered hook with `modified` or `untrusted` status is not an executing hook; the host must trust the current hook content after an update.
+- Verified a real non-mutating Codex run records only per-session trigger runtime state and leaves signals, clusters, and proposals untouched.
+
+## 2026-07-19 Codex Hook Wire Compatibility
+
+- Made all three Codex hook outputs conform to the host wire schema; internal `jinhua` metadata is no longer printed to stdout.
+- Changed Stop reminders to the supported `decision: block` plus short `reason` form, with an explicit `stop_hook_active` pass-through and runtime tickets to prevent loops.
+- Made Windows hook commands use Codex's `${CLAUDE_PLUGIN_ROOT}` substitution instead of shell-specific environment syntax.
+
+## 2026-07-19 Codex Hook Project Resolution
+
+- Fixed all three Codex hook commands to resolve from `CLAUDE_PLUGIN_ROOT` instead of the literal `<jinhua-dir>` placeholder.
+- Made hook project-root resolution accept common nested payload fields and project-directory environment variables.
+- Made stdin payload parsing tolerate a UTF-8 BOM, matching the Windows hook path used by other plugins.
+- Prevented hooks from writing runtime state into the installed plugin when no trustworthy project root is available.
+
+## 2026-06-27 Agent Adapters
+
+- Added `hooks/hooks.json` as a Claude Code plugin hook adapter without changing the core plugin manifest.
+- Added OpenClaw, Hermes, TRAE, and WorkBuddy adapters under `adapters/`.
+- Added adapter smoke tests to keep host wrappers separate from the core jinhua ledger.
+
 ## 2026-06-27 Ready Attention Bridge
 
 - Added a read-only ready-attention check to `codex-user-prompt-submit`.

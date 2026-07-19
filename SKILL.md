@@ -57,19 +57,21 @@ The primary trigger path is three gates:
 
 1. `UserPromptSubmit`: local input classification only. It returns `none`, `possible_user_correction`, or `strong_user_correction`; it never logs signals, runs `cycle`, creates proposals, or edits Skills.
 2. Agent direct call: the agent may call jinhua in the current turn when the user explicitly asks to crystallize a method, or when the agent sees a reusable workflow/verification/tool-choice lesson. A lightweight invocation guard prevents duplicate same-turn jinhua calls.
-3. `Stop`: optional lightweight output-state parsing plus a per-conversation fallback every 8 user turns. It can parse `output_state` / `visibility` / `reason`, check the invocation guard, and briefly remind the agent to scan this turn and prior conversation for reusable lessons. It does not bypass the core jinhua rules or user gate.
+3. `Stop`: lightweight output-state parsing plus a per-conversation fallback every 8 user turns. When a reusable candidate or periodic check needs model attention, it returns Codex's `decision: block` with one short `reason`; when `stop_hook_active` is true it always passes through. It does not bypass the core jinhua rules or user gate.
 
 `UserPromptSubmit` also performs a read-only ready-attention check. If local or global clusters are already `ready`, or if proposals are already waiting at the user gate, it may inject one short reminder to run `cycle` and then either create one proposal, surface one gate, or state a concrete skip reason. This check reads existing JSON/JSONL only; it must not run `cycle`, write `signals.jsonl`, create proposals, or edit Skills.
 
 Codex plugin hook config lives in `hooks/codex-hooks.json` and calls:
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-user-prompt-submit
-python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-post-tool-use
-python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-stop
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py"
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
 ```
 
-The legacy `wake-check` and `hook-user-prompt-submit` commands may remain for compatibility, but they are not the primary trigger path.
+The wrappers resolve the target project without hard-coding a checkout path: they prefer a project path in the hook payload (including common nested fields), then supported project-directory environment variables, then the hook process working directory. If the only fallback is the plugin directory itself, the hook skips runtime writes instead of placing `.jinhua` inside the installed plugin.
+
+Codex hook stdout must contain only fields supported by the host hook schema. Internal classifier and guard details stay in local runtime state or are omitted from hook output. The legacy `wake-check` and `hook-user-prompt-submit` commands may remain for compatibility, but they are not the primary trigger path.
 
 When this Skill is actually selected, run the deterministic checkpoint:
 
