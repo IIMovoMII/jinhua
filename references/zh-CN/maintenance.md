@@ -1,81 +1,89 @@
 # 维护规则
 
-> 英文参考见 [../maintenance.md](../maintenance.md)；本文件是中文维护说明。
+> 英文辅助版本见 [../maintenance.md](../maintenance.md)。
 
-这个项目的形态是：一个 Skill，加一个单文件 CLI。除非真实使用证明有必要，否则不要把它做大。
+Jinhua 的稳定形态是：精简 Skill、单文件标准库 CLI、薄宿主触发适配。除非真实运行数据证明必须拆分，否则保持这个形态。
 
-日常定位先读根目录的 `AGENTS.md`、`PROJECT_RULES.md` 和 `PROJECT_INDEX.md`。本文件保存较完整的维护规则；只有文件归属、目录结构或项目规范真的变化时，才同步更新根目录导航文件。
+日常先读 `AGENTS.md`；涉及文件归属或结构时，再读 `PROJECT_RULES.md` 和 `PROJECT_INDEX.md`。
 
-## 文件规则
+## 文件职责
 
-- `SKILL.md` 是智能体（Agent）实际读取的控制面，不是知识库。
-- `SKILL.zh-CN.md` 是中文说明，不替代英文控制面。
-- `README.md` 是默认中文用户指南。
-- `README.en.md` 是英文辅助文档。
-- `PROJECT_MAP.md` 是英文项目地图。
-- `PROJECT_MAP.zh-CN.md` 是中文项目地图。
-- `PROJECT_INDEX.md` 是逐文件中文导航索引。
-- `PROJECT_RULES.md` 是简短的项目规范。
-- `references/` 主目录保持精简。
-- `references/zh-CN/` 保存中文说明和术语表。
-- 能放进现有文件的内容，不要新建 reference 文件。
+- `SKILL.md`：实际运行控制面，保持简短。
+- `SKILL.zh-CN.md`：中文说明，不替代控制面。
+- `scripts/jinhua.py`：唯一 CLI 和确定性账本实现。
+- `hooks/codex-hooks.json`、`hooks/codex_*.py`：Codex 触发层。
+- `hooks/hooks.json`：复用同一 wrapper 的 Claude Code 适配。
+- `references/cli-usage.md`：命令契约。
+- `references/data-policy.md`：记录和隐私边界。
+- `references/runtime-schema.md`：当前结构与迁移。
+- `references/hook-integration.md`：触发层和宿主协议。
+- `adapters/`：只放宿主包装。
 
-## CLI 规则
+现有主题文件能承载的内容，不要再新建 reference。
 
-只要工作流仍然清晰，就保持 `scripts/jinhua.py` 为单文件。
+## CLI 边界
 
-CLI 可以做：
+CLI 可以：
 
-- 初始化运行态。
-- 记录结构化信号。
-- 更新本地聚类。
-- 导入全局晋升记录。
-- 输出提案骨架。
-- 记录用户确认结果。
-- 只读给出全局合并建议。
-- 压缩和验证数据。
+- 初始化和迁移运行态；
+- 记录已经通过筛选的信号；
+- 更新精确本地/全局聚类；
+- 推荐落点所有者和项目规则文件；
+- 创建完整的用户确认提案；
+- 记录修订、拒绝和已验证采纳；
+- 验证运行态。
 
-CLI 不能做：
+CLI 不能：
 
-- 最终判断某条经验是否可迁移。
-- 绕过用户确认自动应用 Skill 修改。
-- 存储用户原文。
-- 执行网页搜索。
+- 最终判断语义可迁移性；
+- 自动模糊合并方法；
+- 写入用户批准的 Skill 或规则文件；
+- 保存用户原文；
+- 执行网页搜索；
 - 作为后台进程运行。
 
-## 中文文档规则
+已经写入的信号永久保留。弱信号和不安全内容必须在写入前拒绝。
 
-- 中文公开文档是默认用户入口。
-- 用户可见行为变化时，同时检查中文默认文档和英文辅助文档。
-- CLI 命令、参数名、JSON 字段、operator id 不翻译。
-- 中文文档要解释这些英文名的含义，不要只照搬英文词。
-- [glossary.md](glossary.md) 是中文用户理解参数的入口。
-- 面向用户的 Skill 对话应跟随用户当前语言。
-- 持久化数据、结构字段（schema fields）、命令名和生成出来的 Skill 文件可以保持英文，除非用户另有要求。
+## 触发层边界
 
-## 架构规则
+Hook 可以做本地纠错分类、读取就绪/待确认状态、统计回合、固定每 8 轮提醒，以及写调用保护运行态。
 
-不要添加：
+Hook 不能迁移核心 schema、写信号、创建提案、记录确认结果、修改文件，也不能每条消息都跑完整 `cycle`。
 
-- 后台进程（daemon）。
-- 外部数据库。
-- 向量库。
-- 图数据库。
-- 仪表盘（dashboard）。
-- 多智能体（multi-agent）工作流。
+## 中文与英文
 
-只有真实运行数据出现可测量瓶颈时，才重新考虑架构。
+- 中文公开文档是默认入口。
+- 英文镜像要同步用户可见行为。
+- CLI 命令、参数、JSON 字段、operator id 和 placement id 不翻译。
+- 稳定英文标识在 `references/zh-CN/glossary.md` 中解释。
+- 用户确认门和说明跟随用户当前语言。
 
-## 打包规则
+## 架构约束
 
-不要打包：
+没有真实数据和明确设计决定时，不添加后台进程、外部数据库、向量库、图数据库、仪表盘、多智能体流程或第二套经验账本。
 
-- `.jinhua/`
-- `global-data/`
-- `.claude/`
-- `skill.zip`
-- `__pycache__/`
-- 本地权限文件
-- `.archive/`
+## 打包与隐私
 
-结构（schema）变更必须同时更新英文和中文结构文档，并通过 `validate`。
+不得打包或提交：
+
+- `.jinhua/`；
+- `global-data/`；
+- `.claude/`；
+- `.archive/`；
+- `__pycache__/` 和 Python 字节码；
+- 本地权限文件或生成压缩包。
+
+## 必须验证
+
+```bash
+python scripts/test_core_loop.py
+python scripts/test_trigger_layer.py
+python scripts/test_adapters.py
+python -m py_compile scripts/jinhua.py hooks/codex_user_prompt_submit.py hooks/codex_post_tool_use.py hooks/codex_stop.py
+python scripts/jinhua.py --project-root <project-root> validate
+git diff --check
+```
+
+schema 变化必须同步 `references/runtime-schema.md` 和中文镜像；触发层变化必须同步 Hook 测试和中英文 Hook 文档。
+
+每次发布 Skill/插件改动都要完成：验证、plugin-creator cachebuster/reinstall、本机 enabled 检查、提交和推送。

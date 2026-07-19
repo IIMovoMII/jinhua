@@ -385,10 +385,11 @@
         <div>
           <h1 id="page-title">jinhua 技能（jinhua skill）运行逻辑</h1>
           <p class="lead">
-            jinhua 把真实任务里的可复用方法沉淀成可验证、可合并、可由用户确认的技能改进（Skill improvement）。它不做后台常驻，也不绕过用户确认；它在被触发时运行一次确定性闭环。
+            jinhua 把真实任务里的可复用方法沉淀成可验证、可跨项目归并、可由用户确认的技能改进（Skill improvement）。触发层只分类、计数、提醒和去重；核心账本与用户确认门保持独立。
           </p>
           <div class="chips" aria-label="核心特征">
             <span class="chip">触发时运行自动检查（cycle）</span>
+            <span class="chip">本地纠错判断 + 每 8 轮回顾</span>
             <span class="chip">弱信号静默忽略</span>
             <span class="chip">强证据才提案</span>
             <span class="chip">项目规则 / 增强 Skill / 全局 Skill / 拒绝 / 修订</span>
@@ -435,34 +436,55 @@
       </div>
     </section>
 
-    <section class="band" aria-labelledby="decision-title">
+    <section class="band" aria-labelledby="trigger-title">
       <div class="section-title">
         <span class="mark">2</span>
+        <h2 id="trigger-title">三道触发闸门</h2>
+      </div>
+      <div class="checks">
+        <article class="check">
+          <h3>第一道：输入侧本地判断</h3>
+          <p>用户输入后、本轮主模型处理前，用本地规则判断是否在纠正工作流、验证标准、工具或遗漏流程；同时读取就绪聚类和待确认门。它不写经验，也不单独调用模型。</p>
+        </article>
+        <article class="check">
+          <h3>第二道：直接调用与去重</h3>
+          <p>用户明确要求沉淀，或 Agent 发现可迁移方法时，可以当前轮直接进入 jinhua。调用保护门只防同轮重复和循环，不拦第一次有效调用。</p>
+        </article>
+        <article class="check">
+          <h3>第三道：固定 8 轮回顾</h3>
+          <p>按单个会话每 8 个不同用户回合请求一次极短回顾，检查本轮及此前对话。它不要求输出状态尾巴；本轮已调用 jinhua 或 Stop 正在回调时直接放行。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="decision-title">
+      <div class="section-title">
+        <span class="mark">3</span>
         <h2 id="decision-title">什么时候安静，什么时候打扰用户</h2>
       </div>
       <div class="split">
         <div class="branches">
           <article class="branch good">
             <h3>安静路径</h3>
-            <p>单次弱信号、普通偏好、一次性事实、泛泛提示词，不进入提案（proposal）。jinhua 只继续任务，最多静默记录。</p>
+            <p>单次弱信号、普通偏好、一次性事实、泛泛提示词，不写入账本，也不进入提案（proposal）。</p>
           </article>
           <article class="branch warn">
             <h3>本地就绪条件（ready）</h3>
-            <p>同一聚类（cluster）至少 3 条活跃信号（active signals），或强度总和达到 5，或用户明确要求现在沉淀，或出现高成本且可复用的失败。</p>
+            <p>同一聚类（cluster）至少 3 条活跃信号（active signals），或强度总和达到 5。明确沉淀要求或紧急高成本失败只能通过 <code>log-signal --immediate</code> 进入即时通道。</p>
           </article>
           <article class="branch">
             <h3>提案路径</h3>
-            <p>已就绪聚类（ready cluster）先产出提案骨架（proposal skeleton），包括建议落点（placement hint）和具体本地 Skill 推荐；模型再压缩成 1 到 3 句修改说明（patch）和主要风险（risk）。</p>
+            <p>已就绪聚类（ready cluster）先产出提案骨架（proposal skeleton）；Agent 再补成具体目标、带标题的完整 Markdown 修改块（patch）和主要风险（risk），占位符不能进入确认门。</p>
           </article>
         </div>
         <div class="branches">
           <article class="branch">
             <h3>选择落点（Placement）</h3>
-            <p>用户可以选择项目规则、增强已有 Skill 或个人全局 Skill。选择某个落点，就等价于对这个落点同意（Yes）。</p>
+            <p>用户可以选择项目规则、增强已有 Skill 或个人全局 Skill。选择后，Agent 先用宿主原生工具修改并验证目标，成功后 apply 命令才记录采纳；CLI 本身不写目标文件。</p>
           </article>
           <article class="branch warn">
             <h3>拒绝（No）</h3>
-            <p>记录拒绝，聚类（cluster）进入冷却期（cooldown），避免同一弱证据反复打扰用户。</p>
+            <p>记录拒绝，聚类（cluster）进入冷却（cooldown）；收到 5 条新的同类信号后才解除，避免反复打扰用户。</p>
           </article>
           <article class="branch good">
             <h3>修订（Revision）</h3>
@@ -474,7 +496,7 @@
 
     <section class="band" aria-labelledby="data-title">
       <div class="section-title">
-        <span class="mark">3</span>
+        <span class="mark">4</span>
         <h2 id="data-title">数据树</h2>
       </div>
       <div class="tree" aria-label="运行态数据树">
@@ -495,7 +517,7 @@
             </article>
             <article class="node">
               <h3>稳定入口：<code>scripts/jinhua.py</code></h3>
-              <p>命令行接口（CLI）只做确定性账本工作：初始化、记录、聚类、导入、提案记录、确认结果、压缩和验证。</p>
+              <p>命令行接口（CLI）只做确定性账本工作：初始化、迁移、记录、聚类、导入、完整提案记录、确认结果记账和验证。所有已写入信号永久保留。</p>
             </article>
           </div>
         </div>
@@ -504,7 +526,7 @@
 
     <section class="band" aria-labelledby="global-title">
       <div class="section-title">
-        <span class="mark">4</span>
+        <span class="mark">5</span>
         <h2 id="global-title">跨项目晋升</h2>
       </div>
       <div class="metrics">
@@ -529,7 +551,7 @@
 
     <section class="band" aria-labelledby="smart-title">
       <div class="section-title">
-        <span class="mark">5</span>
+        <span class="mark">6</span>
         <h2 id="smart-title">“更聪明”的具体含义</h2>
       </div>
       <div class="checks">
@@ -550,7 +572,7 @@
 
     <section class="band" aria-labelledby="commands-title">
       <div class="section-title">
-        <span class="mark">6</span>
+        <span class="mark">7</span>
         <h2 id="commands-title">检查命令</h2>
       </div>
       <p>下面这些命令必须保持英文，因为它们是可执行接口；中文页面负责解释它们的含义。</p>
@@ -561,7 +583,7 @@ python &lt;jinhua-dir&gt;/scripts/jinhua.py --project-root &lt;project-root&gt; 
     </section>
 
     <p class="foot">
-      运行原则：脚本保证账本确定性，模型负责迁移判断，用户负责最终风险确认。
+      运行原则：脚本保证账本确定性，Agent 负责可迁移性判断和原生编辑验证，用户负责最终风险确认。
     </p>
   </main>
 </body>

@@ -1,168 +1,157 @@
 # CLI Usage
 
-The CLI is a deterministic ledger. It does not decide whether a method is intelligent, transferable, or worth writing into a Skill.
+All commands use Python's standard library. Put global options before the subcommand.
 
-## Automatic Checkpoint
+## Checkpoint
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 ```
 
-`cycle` initializes missing runtime files, summarizes local state, imports active local signals into global promotion state, surfaces pending gates, and prints proposal skeleton hints for ready clusters. Ready skeletons include `placement_hint`; when the hint is `skill_patch`, they include the concrete recommended local Skill and path when one can be matched. When the hint is `project_rule`, they include `recommended_project_rule_file`.
+`cycle` initializes or migrates local runtime, summarizes local state, imports compressed active signals into global runtime, and surfaces pending gates or ready proposal skeletons.
 
-Use `--json` for machine-readable output. Use `--fail-on-pending-gate` when a hook needs exit code `2` for pending local or global user gates. Use `--no-global` only for tests or debugging.
+Useful options:
 
-Use `--agent-profile` or `JINHUA_AGENT_PROFILE` to tune project-rule file recommendations. Supported profiles are `codex`, `claude`, `copilot`, `trae`, `hermes`, `openclaw`, `workbuddy`, and generic/custom fallback.
+- `--json`: machine-readable output
+- `--fail-on-pending-gate`: exit `2` when a local/global gate is waiting
+- `--no-global`: skip global import for tests or diagnostics
+- `--project-id <stable-key>`: distinguish unrelated projects/conversations sharing one workspace; only its hash is stored
 
 ## Trigger Layer
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py classify-input --text "<latest user message>" --json
+python <jinhua-dir>/scripts/jinhua.py classify-input --text "you misunderstood the workflow" --json
+python <jinhua-dir>/scripts/jinhua.py codex-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py codex-post-tool-use
+python <jinhua-dir>/scripts/jinhua.py codex-stop
 ```
 
-`classify-input` is the primary read-only input gate. It returns `none`, `possible_user_correction`, or `strong_user_correction`. It does not run `cycle`, log signals, store user text, or create proposals.
+- `classify-input` returns `none`, `possible_user_correction`, or `strong_user_correction`.
+- `codex-user-prompt-submit` classifies locally, counts unique turns, and may inject short correction/ready attention.
+- `codex-post-tool-use` records same-turn Jinhua entry for duplicate protection.
+- `codex-stop` performs only the fixed eight-turn periodic check and always passes when `stop_hook_active` is true.
 
-Codex hook entries call:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-user-prompt-submit
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-post-tool-use
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-stop
-```
-
-Supporting read-only tools:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py parse-output-state --text "<assistant output>" --pretty
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> guard --session-id s --turn-id t --source manual --reason "..." --mark
-```
-
-`codex-user-prompt-submit` reads hook JSON from stdin and may emit a short `additionalContext`. It also reads existing ready clusters and pending user gates so unresolved jinhua work is carried into the next prompt. `codex-post-tool-use` records that jinhua was already entered in this turn. `codex-stop` parses the output-state tail and, when needed, returns one valid `decision: block` reason after checking the invocation guard; it passes through when `stop_hook_active` is true. None of these commands write `signals.jsonl`, create proposals, or bypass the user gate.
-
-Legacy compatibility commands remain available but are not the primary path:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
-```
-
-## Project Identity
-
-Global promotion groups evidence by hashed project identity. By default, jinhua uses the git remote when available, then falls back to the project root path.
-
-If one workspace contains unrelated projects or conversations, pass a stable explicit identity:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> --project-id <stable-project-or-conversation-key> cycle
-```
-
-You can also set `JINHUA_PROJECT_ID`. The explicit value is hashed before storage; global records do not keep the raw id.
+Hooks never migrate core data, write signals/proposals, or edit files.
 
 ## Record A Signal
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> log-signal \
   --source-type user_correction \
-  --summary "Read README and relevant source before recommending reusable GitHub projects" \
+  --summary "Read README and relevant source before recommending a project" \
   --operator verification_path \
-  --cluster-key verification_path:read_readme_and_source_before_recommending_projects \
-  --context "researching reusable tools" \
+  --cluster-key verification_path:verify_projects_before_recommending \
+  --context "evaluating reusable external projects" \
   --strength 2 \
-  --trigger "recommending external projects for adoption" \
-  --action "verify README and relevant source before recommending" \
-  --transfer-conditions "tool, library, Skill, or agent project recommendations" \
-  --negative-cases "quick pointers where the user did not ask for adoption judgment" \
-  --verification-path "cite README and source files used" \
-  --confidence 0.8 \
+  --trigger "recommending an external project for adoption" \
+  --action "read the README and relevant source before recommending" \
+  --transfer-conditions "Skill, library, tool, or agent-project recommendations" \
+  --negative-cases "quick name-only pointers" \
+  --verification-path "cite the README and inspected source" \
   --auto-init
 ```
 
-Only `source-type`, `summary`, `operator`, `cluster-key`, `context`, and `strength` are required. The signal-card fields improve cross-project fingerprinting.
+Source type, summary, operator, cluster key, and context are required. Strength defaults to `1`; pass it explicitly when the evidence is a correction, repetition, or high-cost failure. Signal-card fields improve transfer judgment and global fingerprints.
 
-## Local Proposals
+Use `--immediate` only for an explicit crystallization request or urgent reusable high-cost failure. It is the only readiness bypass.
+
+## Local Proposal
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
-  --cluster-key <cluster-key> \
-  --decision proposed_edit \
-  --placement <project_rule|skill_patch|personal_global_skill> \
-  --target "<target Skill / file / insertion location>" \
-  --patch "## <Short Rule Title>
+  --cluster-key verification_path:verify_projects_before_recommending \
+  --placement skill_patch \
+  --recommended-skill github-project-due-diligence \
+  --recommended-skill-path "<skill-dir>/SKILL.md" \
+  --target "<skill-dir>/SKILL.md / Source Verification" \
+  --patch "## Source Verification
 
-<Complete Markdown rule block.>" \
-  --risk "<main side effect>"
+Read the README and relevant source before recommending a project for adoption." \
+  --risk "May add unnecessary work to quick name-only pointers."
 ```
 
-If `--placement` is omitted, jinhua uses the skeleton's recommended placement. Use `project_rule` for current-project settling, `skill_patch` for an existing local Skill enhancement, and `personal_global_skill` for an all-project personal Skill. For `skill_patch`, jinhua recommends the most suitable local Skill; pass `--recommended-skill` or `--recommended-skill-path` only when overriding that recommendation. For `project_rule`, jinhua recommends a target project rule file but does not create it automatically.
+`target`, a Markdown `patch` with a heading, and `risk` are mandatory. `placement` may be omitted to use the skeleton recommendation. A `skill_patch` requires a concrete Skill name/path; a `project_rule` requires the resolver's project-rule file.
 
-After the user gate:
+The proposal enters `pending_user_gate`. Show the localized user gate before continuing.
+
+## Apply, Revise, Or Reject
+
+After the user accepts, edit and verify the target with the host's native tools. Then record adoption:
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal --proposal-id <id> --placement <chosen-placement>
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal --proposal-id <id> --reason "..."
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal --proposal-id <id> --reason "..." --revision
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal \
+  --proposal-id <proposal-id> \
+  --placement skill_patch \
+  --applied-target "<skill-dir>/SKILL.md" \
+  --summary "Added the approved Source Verification rule and verified the diff."
 ```
+
+The apply command never writes the target file.
+
+If the user chooses a different placement, revise the proposal before applying so its owner and target metadata match the accepted placement.
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal \
+  --proposal-id <proposal-id> \
+  --reason "Too broad"
+
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal \
+  --proposal-id <proposal-id> \
+  --reason "Limit it to adoption recommendations" \
+  --revision
+```
+
+Revision keeps the gate open. Rejection starts a fixed 5-new-signal cooldown.
 
 ## Global Promotion
 
-Ordinary `cycle` already imports local active signals into `global-data/`.
-
-Manual inspection:
+Ordinary `cycle` already imports local signals. Manual inspection:
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-status
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-cycle
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-status
 ```
 
-Create a global proposal:
+Create a ready global proposal with mandatory target/patch/risk:
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-propose \
   --method-fingerprint <fingerprint> \
-  --decision proposed_edit \
-  --placement <skill_patch|personal_global_skill> \
-  --target "<target Skill / file / insertion location>" \
-  --patch "## <Short Rule Title>
+  --placement personal_global_skill \
+  --target "~/.codex/skills/<skill-name>/SKILL.md" \
+  --patch "## Reusable Rule
 
-<Complete Markdown rule block.>" \
-  --risk "<main side effect>"
+Apply the verified cross-project method." \
+  --risk "May be too broad for projects with different constraints."
 ```
 
-Global proposals should normally use `skill_patch` when a matching local Skill exists, otherwise `personal_global_skill`. Cross-project evidence is for global promotion; same-project repetition should be handled by local proposals first.
+After native editing and verification, use `global-apply` with `--proposal-id`, `--placement`, `--applied-target`, and `--summary`. Use `global-reject [--revision]` for rejection or revision.
 
-Inspect possible duplicate global methods without mutating data:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-merge-suggestions
-```
-
-## Maintenance Commands
+## Diagnostics
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> list-clusters
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> status
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> compact --dry-run
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> list-clusters
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> guard --session-id s --turn-id t
 ```
+
+`validate` migrates old runtime first, then enforces the current schema and removed-field boundary.
 
 ## Runtime Files
 
-Project-local:
-
 ```text
-.jinhua/data/
-|-- signals.jsonl
-|-- cluster-state.json
-|-- proposals.jsonl
-|-- adopted-edits.jsonl
-|-- rejected-proposals.jsonl
-|-- crystallized-operators.jsonl
-`-- evolution-state.json
-```
+<project-root>/.jinhua/
+|-- data/
+|   |-- signals.jsonl
+|   |-- cluster-state.json
+|   |-- proposals.jsonl
+|   |-- adopted-edits.jsonl
+|   |-- rejected-proposals.jsonl
+|   `-- evolution-state.json
+`-- runtime/
+    `-- invocation-guard.json
 
-Global:
-
-```text
 <jinhua-dir>/global-data/
 |-- global-signals.jsonl
 |-- global-clusters.json
@@ -172,3 +161,5 @@ Global:
 |-- project-index.json
 `-- global-state.json
 ```
+
+See [runtime-schema.md](runtime-schema.md) for fields and migration behavior.

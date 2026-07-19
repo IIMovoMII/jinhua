@@ -1,5 +1,5 @@
 {
-  "description": "Claude Code hook adapter for jinhua. Reuses the existing read-only trigger layer and never writes signals or proposals from hooks.",
+  "description": "Claude Code hook adapter for jinhua. Reuses the same lightweight trigger layer and never writes signals or proposals from hooks.",
   "hooks": {
     "UserPromptSubmit": [
       {

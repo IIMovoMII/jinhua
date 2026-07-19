@@ -2,7 +2,7 @@
   "id": "jinhua",
   "name": "jinhua",
   "description": "Gated Skill evolution adapter for OpenClaw.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "skills": [
     "skills/jinhua"
   ],

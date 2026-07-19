@@ -1,17 +1,22 @@
 # Agent Adapters
 
-These adapters keep the core jinhua loop unchanged. They only expose the same Skill/CLI instructions through host-specific packaging.
-
-## Support Levels
+Adapters expose the canonical Jinhua Skill and CLI without changing the core loop.
 
 | Host | Adapter | Scope |
 | --- | --- | --- |
-| Claude Code | `hooks/hooks.json` | Native plugin hook adapter. Uses Claude Code's plugin hook location and `${CLAUDE_PLUGIN_ROOT}`. |
-| OpenClaw | `adapters/openclaw/skills/jinhua/SKILL.md` | Skill adapter. Install as an OpenClaw skill or package inside an OpenClaw plugin. |
-| Hermes | `adapters/hermes/skills/jinhua/SKILL.md` | Agent Skills-compatible skill adapter. |
-| TRAE | `adapters/trae/skills/jinhua/SKILL.md` | Agent Skills-compatible skill adapter. |
-| WorkBuddy | `adapters/workbuddy/skills/jinhua/SKILL.md` | Generic Agent Skills-compatible skill adapter. |
+| Claude Code | `hooks/hooks.json` | Native UserPromptSubmit, PostToolUse, and Stop hooks using the same wrappers as Codex. |
+| OpenClaw | `adapters/openclaw/openclaw.plugin.json` + Skill | Plugin/Skill packaging. |
+| Hermes | `adapters/hermes/skills/jinhua/SKILL.md` | Agent Skills-compatible wrapper. |
+| TRAE | `adapters/trae/skills/jinhua/SKILL.md` | Agent Skills-compatible wrapper. |
+| WorkBuddy | `adapters/workbuddy/skills/jinhua/SKILL.md` | Generic Agent Skills-compatible wrapper. |
 
-## Boundary
+## Shared Contract
 
-Adapters may route attention to jinhua. They must not create another experience ledger, bypass the user gate, or change `signals -> clusters -> proposals -> user gate`.
+- Start a selected Jinhua branch with `cycle`.
+- Apply the same `trigger + action` write gate and thresholds.
+- Create complete proposals only from ready clusters.
+- Preserve the localized placement-aware user gate.
+- Edit and verify accepted targets with host-native tools before recording adoption.
+- Do not create another ledger or auto-log from adapter hooks.
+
+Only Codex and Claude Code adapters include lifecycle Hook definitions here. Automatic triggering for other hosts depends on their own plugin and Skill support.

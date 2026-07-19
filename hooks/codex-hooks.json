@@ -34,7 +34,7 @@
             "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py\"",
             "commandWindows": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py\"",
             "timeout": 5,
-            "statusMessage": "Checking jinhua output state"
+            "statusMessage": "Checking jinhua periodic review"
           }
         ]
       }

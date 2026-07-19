@@ -13,4 +13,4 @@ Set `JINHUA_ROOT` to the installed jinhua repository or plugin directory. Start 
 python "$JINHUA_ROOT/scripts/jinhua.py" --project-root "$PWD" cycle
 ```
 
-Only log a signal when the lesson has a reusable `trigger` plus `action`. If a cluster is ready, create one proposal or state a concrete skip reason. Never apply edits without the user gate.
+Only log a signal when the lesson has a reusable `trigger` plus `action`. If a cluster is ready, create one complete proposal or state a concrete skip reason. Keep the user gate intact. After acceptance, edit and verify with host-native tools before using the ledger-only apply command.

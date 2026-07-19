@@ -1,145 +1,117 @@
 # PROJECT_MAP
 
-Daily agent entry: read `AGENTS.md`, then `PROJECT_RULES.md` and `PROJECT_INDEX.md` when the task affects structure or file ownership.
+Daily entry: read `AGENTS.md`; read `PROJECT_RULES.md` and `PROJECT_INDEX.md` when structure or ownership matters.
 
 ## Product Shape
 
-`jinhua` is a compact Skill + CLI that turns repeated methodology signals into user-gated Skill improvements.
+Jinhua is a compact Skill + standard-library CLI + thin host trigger adapters.
 
-Responsibility split:
+- **Trigger layer**: local correction classification, ready attention, per-session turn counting, same-turn deduplication, and a fixed eight-turn review.
+- **Skill**: semantic write/skip judgment, abstraction, placement, proposal content, and localized user dialogue.
+- **CLI**: deterministic storage, exact clustering, cross-project import, migration, complete proposal records, gate outcomes, and validation.
+- **Agent**: edits and verifies an accepted target with host-native tools.
+- **User**: approves placement, rejects, or requests revision.
 
-- **Skill**: decides whether a signal is reusable, transferable, risky, duplicated, or worth proposing.
-- **CLI**: records signals, clusters evidence, imports global promotion evidence, emits placement-aware skeletons, recommends project-rule files, records gate outcomes, suggests merge candidates, compacts, and validates.
-- **User**: gates proposals with localized labels backed by `project_rule`, `skill_patch`, `personal_global_skill`, `No`, and `Revision`.
+The core remains:
 
-## Main Files
+```text
+signals -> clusters -> proposals -> user gate
+```
+
+## Active Tree
 
 ```text
 jinhua/
 |-- SKILL.md
+|-- SKILL.zh-CN.md
 |-- README.md
 |-- README.en.md
-|-- CONTRIBUTING.md
-|-- CONTRIBUTING.en.md
-|-- SECURITY.md
-|-- SECURITY.en.md
-|-- CODE_OF_CONDUCT.md
-|-- CODE_OF_CONDUCT.en.md
 |-- AGENTS.md
 |-- PROJECT_RULES.md
 |-- PROJECT_INDEX.md
 |-- PROJECT_MAP.md
+|-- PROJECT_MAP.zh-CN.md
 |-- CHANGELOG.md
-|-- .github/
-|   |-- ISSUE_TEMPLATE/
-|   |   |-- bug_report.yml
-|   |   |-- feature_request.yml
-|   |   `-- config.yml
-|   `-- PULL_REQUEST_TEMPLATE.md
-|-- .agents/
-|   `-- plugins/
-|       `-- marketplace.json
-|-- .claude-plugin/
-|   |-- marketplace.json
-|   `-- plugin.json
+|-- CHANGELOG.zh-CN.md
 |-- .codex-plugin/
 |   `-- plugin.json
+|-- .claude-plugin/
+|   |-- plugin.json
+|   `-- marketplace.json
+|-- .agents/plugins/
+|   `-- marketplace.json
 |-- hooks/
-|   |-- hooks.json
 |   |-- codex-hooks.json
+|   |-- hooks.json
 |   |-- codex_user_prompt_submit.py
 |   |-- codex_post_tool_use.py
 |   `-- codex_stop.py
+|-- skills/jinhua/
+|   `-- SKILL.md
 |-- adapters/
 |   |-- README.md
 |   |-- openclaw/
 |   |-- hermes/
 |   |-- trae/
 |   `-- workbuddy/
-|-- skills/
-|   `-- jinhua/
-|       `-- SKILL.md
 |-- scripts/
 |   |-- jinhua.py
+|   |-- test_core_loop.py
 |   |-- test_trigger_layer.py
 |   `-- test_adapters.py
 |-- references/
 |   |-- cli-usage.md
-|   |-- operator-json-schema.md
 |   |-- data-policy.md
+|   |-- runtime-schema.md
 |   |-- hook-integration.md
-|   `-- maintenance.md
+|   |-- maintenance.md
+|   `-- zh-CN/
+|       |-- cli-usage.md
+|       |-- data-policy.md
+|       |-- runtime-schema.md
+|       |-- hook-integration.md
+|       |-- maintenance.md
+|       `-- glossary.md
 |-- docs/
 |   `-- jinhua-logic.html
-`-- data/
-    `-- crystallized-operators.jsonl
+`-- .github/
+    |-- ISSUE_TEMPLATE/
+    `-- PULL_REQUEST_TEMPLATE.md
 ```
 
-Root `data/` contains seed data only. Runtime state lives in the target project's `.jinhua/data/`.
-
-Runtime-only global promotion directory:
-
-```text
-jinhua/global-data/
-|-- global-signals.jsonl
-|-- global-clusters.json
-|-- global-proposals.jsonl
-|-- adopted-global-edits.jsonl
-|-- rejected-global-proposals.jsonl
-|-- project-index.json
-`-- global-state.json
-```
+There is no repository seed-data directory in 2.0. Runtime data is created only under the target project or ignored personal global runtime.
 
 ## Current CLI Surface
 
-- `init`
-- `cycle`
-- `classify-input`
-- `codex-user-prompt-submit`
-- `codex-post-tool-use`
-- `codex-stop` (parse output state and request a guarded continuation when needed)
-- `parse-output-state` (read-only tail parser; it does not rewrite host output)
-- `guard`
-- `wake-check`
-- `hook-user-prompt-submit`
-- `log-signal`
-- `list-clusters`
-- `propose`
-- `apply-proposal`
-- `reject-proposal`
-- `global-cycle`
-- `global-status`
-- `global-propose`
-- `global-merge-suggestions`
-- `global-apply`
-- `global-reject`
-- `compact`
-- `status`
-- `validate`
+`init`, `cycle`, `global-cycle`, `classify-input`, `codex-user-prompt-submit`, `codex-post-tool-use`, `codex-stop`, `guard`, `log-signal`, `list-clusters`, `propose`, `apply-proposal`, `reject-proposal`, `global-propose`, `global-apply`, `global-reject`, `status`, `global-status`, and `validate`.
 
-The public CLI surface is intentionally focused on the closed loop above. `wake-check` and `hook-user-prompt-submit` are legacy compatibility commands; the primary Codex trigger layer uses `classify-input`, `codex-user-prompt-submit`, `codex-post-tool-use`, and `codex-stop`.
+Apply commands are ledger-only. Proposal commands require a concrete target, complete Markdown patch, and concrete risk.
 
-## Data Rules
+## Runtime Boundaries
 
-- Project-local raw evidence stays under `.jinhua/data/`.
-- Global promotion stores compressed methodology evidence only.
-- `project-index.json` stores hashed project identities, not raw paths.
-- `global-data/` and `.jinhua/` are runtime state and must not be packaged.
-- Use `--project-id` or `JINHUA_PROJECT_ID` when one workspace contains unrelated projects or conversations.
-- Codex wrappers resolve project roots from hook payloads (including UTF-8 BOM input) and supported environment variables; an unsafe plugin-directory fallback never receives runtime state.
-- Codex hook discovery is separate from execution: a hook marked `modified` or `untrusted` must be trusted by the host before it can run.
+Project-local:
+
+```text
+<project-root>/.jinhua/data/
+<project-root>/.jinhua/runtime/invocation-guard.json
+```
+
+Personal global:
+
+```text
+<jinhua-dir>/global-data/
+```
+
+Both directories are ignored and must never be packaged or committed.
 
 ## Do Not Regress
 
-- Do not ask the user to manage daily signal bookkeeping.
-- Do not interrupt the user for weak single signals.
-- Do not auto-apply Skill edits without a user gate.
-- Do not count duplicate same-project signals as cross-project repetition.
-- Do not ask the user to find the target Skill when `skill_patch` is the recommended placement.
-- Do not auto-create project rule files when `project_rule` is the recommended placement.
-- Do not add daemon, database, vector store, or dashboard.
-- Do not add broad observation commands as first-class workflow.
-- Do not make hooks own experience logic; they only classify, guard, and parse state tails.
-- Do not leave ready clusters invisible; hook attention may surface them, but proposal writing still belongs to `cycle` plus `propose` and the user gate.
-- Do not change the core plugin to chase every agent. Put host-specific wrappers under `adapters/`.
-- Keep repo-local plugin metadata thin: marketplace files route discovery, `.codex-plugin/plugin.json` exposes Codex hooks and skills, and the canonical methodology logic stays in the root `SKILL.md`.
+- Do not auto-log from Hooks.
+- Do not hide a ready cluster indefinitely; ready attention must bring it back to the agent.
+- Do not interrupt for weak single signals.
+- Do not bypass the placement-aware user gate.
+- Do not record adoption before native editing and verification succeed.
+- Do not count same-project repetition as cross-project repetition.
+- Do not ask the user to find a target Skill or project rule file.
+- Do not add fuzzy merge, compaction, operator promotion, daemon, database, vector store, dashboard, or a second ledger.
+- Keep host-specific packaging under `adapters/`.

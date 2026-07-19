@@ -1,60 +1,69 @@
 # 项目规范
 
-这是一个“Skill + 单文件 CLI + 薄触发层”的项目。规范的目标是保持主线清晰、运行态和发布文件分离、让后续智能体能快速定位正确文件。
+Jinhua 是“精简 Skill + 单文件标准库 CLI + 薄宿主触发适配”。目标是让主闭环可审计、运行态与发布文件分离、后续 Agent 能快速找到权威文件。
 
-## 文件边界
+## 权威边界
 
-- `SKILL.md`：英文 active control plane，定义 Skill 被选中后的方法论流程。
-- `README.md`：中文默认用户入口；`README.en.md`：英文辅助版本。
-- `scripts/jinhua.py`：唯一 CLI。核心账本逻辑和触发层入口都在这里，但两者必须保持边界清楚。
-- `hooks/codex-hooks.json`、`hooks/codex_user_prompt_submit.py`、`hooks/codex_post_tool_use.py`、`hooks/codex_stop.py`：Codex 触发层。
-- `hooks/hooks.json`：Claude Code 的薄适配层，复用 Codex wrapper，不创建第二套逻辑。
-- `data/`：随项目发布的 operator 种子数据。
-- `references/`：按主题保存详细规则、数据政策、CLI 和宿主适配说明。
-- `adapters/`：OpenClaw、Hermes、TRAE、WorkBuddy 等宿主的包装，不改变核心闭环。
-- `PROJECT_INDEX.md`：逐文件导航；`PROJECT_MAP.md`：产品形态和目录概览。
+- `SKILL.md`：英文 active control plane，定义 Skill 被选中后的流程。
+- `SKILL.zh-CN.md`：中文解释，不替代控制面。
+- `scripts/jinhua.py`：唯一 CLI，包含确定性核心账本和触发层命令；两者必须保持边界。
+- `hooks/codex-hooks.json`、`hooks/codex_*.py`：Codex 三道触发闸门。
+- `hooks/hooks.json`：Claude Code 薄适配，复用同一 wrapper。
+- `references/`：CLI、数据政策、运行态 schema、Hook 和维护规则。
+- `adapters/`：其他宿主包装，不改变核心闭环。
+- `PROJECT_INDEX.md`：逐文件导航；`PROJECT_MAP*.md`：产品形态和目录概览。
 
 ## 运行态与归档
 
 - `.jinhua/` 保存项目本地经验和触发层运行态，必须保留在本机但不得提交。
 - `global-data/` 保存个人全局晋升运行态，必须保留在本机但不得提交。
 - `.archive/` 只保存本地历史或可再生文件，不参与运行、不作为实现依据，也不得提交。
-- `__pycache__/`、`.pyc` 等缓存可以清理或放入 `.archive/`，不能成为源码依赖。
+- `__pycache__/`、`*.pyc` 等缓存不能成为源码依赖。
 
-## 修改约束
+## 不可破坏的闭环
 
-- 不绕过 `signals -> clusters -> proposals -> user gate`、placement ladder 或用户确认门。
-- 触发层可以改输入分类、项目根解析、调用去重、周期检查和宿主协议适配；不得在 Hook 中写 `signals`、`proposals` 或新增经验账本。
-- 保持 `scripts/jinhua.py` 为单文件，除非真实运行数据证明拆分有必要。
-- 不新增后台 daemon、外部数据库、向量库、图数据库或第二套事件/经验状态。
-- 用户可见行为变化时，同步中文默认文档和英文辅助文档；CLI 命令、参数、JSON 字段和 operator id 保持英文，并在中文术语表解释。
+- 保持 `signals -> clusters -> proposals -> user gate`。
+- 保持本地阈值：3 条信号或总强度 5。
+- 保持全局普通阈值和快速路径。
+- 保持 `project_rule -> skill_patch -> personal_global_skill` 的落点语义。
+- Hook 只能分类、计数、提醒、读取 ready/pending 状态和同轮去重；不得迁移核心数据、写 signals/proposals 或修改文件。
+- CLI apply 只记录已经由宿主原生工具完成并验证的修改，不写目标文件。
+- 不新增第二套经验账本、后台 daemon、外部数据库、向量库、图数据库或多智能体流程。
 
-## 按需更新
+## 数据和语言
 
-- 小型实现修复：更新对应源码和测试即可。
-- 入口、架构、文件归属或运行边界变化：同步 `AGENTS.md`、本文件、`PROJECT_INDEX.md`、`PROJECT_MAP` 和相关 references。
-- 用户可见行为或数据政策变化：同步 README、SKILL、更新日志和中英文镜像。
-- 不要求每次提交都修改这些导航文件，只有规则或结构真的变化时才更新。
+- 不记录用户原文、凭证、私人路径或敏感项目标识。
+- 全局层只保存压缩方法证据和哈希化项目身份。
+- 中文公开文档为默认入口；英文辅助文档同步用户可见行为。
+- 命令、参数、JSON 字段、operator id 和 placement id 保持英文。
+
+## 按需同步
+
+- 实现修复：更新对应源码和测试。
+- 用户可见行为变化：同步 README、SKILL、reference 和中英文镜像。
+- 入口、结构或文件职责变化：按需同步 `AGENTS.md`、本文件、`PROJECT_INDEX.md` 和 `PROJECT_MAP*.md`。
+- schema 变化：同步中英文 `runtime-schema.md` 和迁移测试。
 
 ## 验收
 
-提交前至少运行：
-
 ```bash
+python scripts/test_core_loop.py
 python scripts/test_trigger_layer.py
 python scripts/test_adapters.py
 python -m py_compile scripts/jinhua.py hooks/codex_user_prompt_submit.py hooks/codex_post_tool_use.py hooks/codex_stop.py
+python scripts/jinhua.py --project-root <project-root> validate
 git diff --check
 ```
 
-运行测试产生的运行态和缓存必须留在忽略目录中。
+测试产生的运行态和缓存必须留在忽略目录。
 
 ## 发布闸门
 
-每次修改 Skill 项目（源码、SKILL、Hook、插件清单或相关文档）都必须完成同一条链路：
+每次修改 Skill、CLI、Hook、插件清单或相关文档，都必须完成：
 
-1. 运行上面的验证命令，并检查 `git diff --check`。
-2. 使用 `plugin-creator` 的 cachebuster/reinstall 流程更新本机插件；不要只改缓存目录或源文件。
-3. 有意图地提交 Git，并推送当前分支到 GitHub。
+1. 全量验证和隐私扫描。
+2. 使用 `plugin-creator` 的 cachebuster/reinstall 流程更新本机。
+3. 检查插件 installed/enabled 和 Hook 配置。
+4. 提交并推送当前分支。
 
-只更新本地运行态、归档缓存或未进入发布包的临时文件时，不触发这条发布闸门。
+不得只修改源文件或缓存目录后声称发布完成。

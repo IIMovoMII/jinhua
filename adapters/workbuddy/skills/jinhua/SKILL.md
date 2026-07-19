@@ -13,4 +13,4 @@ Set `JINHUA_ROOT` to the installed jinhua repository or plugin directory. Start 
 python "$JINHUA_ROOT/scripts/jinhua.py" --project-root "$PWD" cycle
 ```
 
-Follow the existing jinhua loop and keep the user gate intact.
+Follow the existing jinhua loop and keep the user gate intact. Edit and verify accepted targets with host-native tools; apply commands are ledger-only.

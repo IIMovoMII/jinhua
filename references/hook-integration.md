@@ -1,23 +1,21 @@
 # Hook And Platform Integration
 
-`jinhua` has two compatible entry paths:
+Jinhua has two compatible entry paths:
 
-1. Standard Skill selection through `SKILL.md` metadata.
-2. Codex plugin command hooks through `hooks/codex-hooks.json`.
+1. Skill selection through `SKILL.md`.
+2. Host command hooks that route attention to the same Skill and CLI.
 
-The CLI does not run as a daemon. Hooks only route attention and prevent duplicate same-turn work; they do not judge transferability, write signals, create proposals, or edit Skills.
+The CLI is not a daemon. Hooks classify, count, remind, and deduplicate only. They do not own methodology judgment or the experience ledger.
 
-## Primary Codex Trigger Layer
-
-The primary hook path is three gates:
+## Codex Trigger Layer
 
 ```text
-UserPromptSubmit -> local correction classifier
+UserPromptSubmit -> local correction classification + ready attention + turn count
 PostToolUse      -> invocation guard record
-Stop             -> output-state tail parser
+Stop             -> fixed eight-turn periodic review + loop prevention
 ```
 
-`hooks/codex-hooks.json` calls these commands. Codex resolves `${CLAUDE_PLUGIN_ROOT}` before invoking the platform shell; the Windows override intentionally uses the same form so it does not depend on `cmd.exe` or PowerShell variable syntax:
+`hooks/codex-hooks.json` invokes:
 
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
@@ -25,116 +23,123 @@ python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py"
 python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
 ```
 
-The wrappers delegate to:
+Each wrapper forwards stdin to the matching command in `scripts/jinhua.py`.
 
-```bash
-python <jinhua-dir>/scripts/jinhua.py codex-user-prompt-submit
-python <jinhua-dir>/scripts/jinhua.py codex-post-tool-use
-python <jinhua-dir>/scripts/jinhua.py codex-stop
-```
+## Project Root Resolution
 
-The packaged wrappers receive the hook payload on stdin and resolve the project root in this order: an explicit project path in the payload, common nested payload fields, supported project-directory environment variables, and finally the hook process working directory. A process directory that resolves to the installed plugin itself is treated as unsafe, so the hook returns without creating runtime state rather than writing `.jinhua` into the plugin.
+The wrappers resolve the target project in this order:
+
+1. explicit project path in the Hook payload;
+2. common nested payload fields;
+3. supported project-directory environment variables;
+4. Hook process working directory.
+
+UTF-8 BOM input is accepted. If the only fallback resolves to the installed Jinhua plugin directory, runtime writes are disabled instead of creating `.jinhua` inside the plugin.
 
 ## Host Trust Boundary
 
-Hook discovery and hook execution are separate host states. After a plugin update, Codex may list a Jinhua hook as `modified` or `untrusted`; that hook is discovered but will not run until the host trusts the current hook content. The trust decision belongs to Codex and is not part of the Jinhua experience ledger. A trusted hook then runs the same read-only trigger layer described below.
+Hook discovery and execution are separate host states. After an update, Codex may mark a Hook as `modified` or `untrusted`. The host must trust the current Hook content before it executes.
 
-## Gate 1: Input Classification
+This trust decision belongs to the host. It is not stored in Jinhua's signal, cluster, proposal, or invocation-guard data.
 
-`codex-user-prompt-submit` reads hook JSON from stdin, extracts the latest prompt, and classifies it as:
+## Gate 1: UserPromptSubmit
 
-- `none`
-- `possible_user_correction`
-- `strong_user_correction`
+`codex-user-prompt-submit` extracts the latest prompt and returns:
 
-On a match, it emits only a short `hookSpecificOutput.additionalContext`. Its stdout uses only fields accepted by the Codex hook schema. It never runs `cycle`, writes `signals.jsonl`, creates proposals, stores user text, or edits Skills.
+- `none`;
+- `possible_user_correction`;
+- `strong_user_correction`.
 
-It also performs a read-only ready-attention check against existing runtime JSON/JSONL. If ready clusters or pending user gates exist, it injects a short reminder to run `cycle` and either create one proposal, surface one gate, or state a concrete skip reason. This keeps `ready -> pending_user_gate` closed without a background daemon or extra model call.
+The classifier is fully local. On a correction match, it emits one short `hookSpecificOutput.additionalContext` asking the agent to align with the user's correction before considering Jinhua's existing write gate.
 
-Manual check:
+The same Hook:
+
+- counts unique user turns per hashed session;
+- marks a periodic check due every 8 turns;
+- reads existing local/global ready clusters and pending user gates;
+- may add one short ready-attention reminder.
+
+It does not run `cycle`, migrate core data, save the prompt, append signals, create proposals, or edit files.
+
+Manual classifier check:
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py classify-input --text "you misunderstood, that's not the scope" --json
+python <jinhua-dir>/scripts/jinhua.py classify-input \
+  --text "you misunderstood; change only the trigger layer" \
+  --json
 ```
 
-## Gate 2: Invocation Guard
+## Gate 2: PostToolUse Invocation Guard
 
-`codex-post-tool-use` watches tool payloads for jinhua CLI entries such as `cycle`, `log-signal`, `propose`, `global-cycle`, or `global-propose`.
+`codex-post-tool-use` detects Jinhua CLI entries such as `cycle`, `log-signal`, `propose`, `global-cycle`, and `global-propose`.
 
-It records only lightweight runtime guard state under:
+It records lightweight runtime state under:
 
 ```text
-.jinhua/runtime/invocation-guard.json
+<project-root>/.jinhua/runtime/invocation-guard.json
 ```
 
-This is not an experience ledger. It is only a duplicate guard for the current session/turn/reason.
+The guard stores hashed session/turn ids, a reason digest, entry name, timestamp, recent events, turn counts, and periodic tickets. It is not an experience ledger.
 
 Guard decisions:
 
-- `allow`
-- `already_handled`
-- `merge_context_only`
-- `skip_duplicate`
-- `block_loop`
+- `allow`: first valid entry;
+- `already_handled`: Stop sees that the turn already entered Jinhua;
+- `skip_duplicate`: the same reason is repeated in the same turn;
+- `block_loop`: repeated entries indicate a loop.
 
-## Gate 3: Output-State Tail
+The first direct agent call remains allowed. The guard only prevents later duplicate paths.
 
-`codex-stop` parses a tiny final-state tail:
+## Gate 3: Stop Periodic Review
 
-```text
-output_state: ok
-visibility: silent
-```
+`codex-stop` has two responsibilities:
 
-Allowed `output_state` values:
+1. if `stop_hook_active` is true, pass through immediately;
+2. when the session's fixed eight-turn ticket is due, request one short continuation that scans the current turn and prior conversation for reusable workflow lessons.
 
-- `ok`
-- `user_correction_handled`
-- `self_issue_detected`
-- `uncertain`
-- `jinhua_candidate`
+Before requesting the continuation, Stop checks the invocation guard. If Jinhua already ran in the same turn, it consumes the periodic ticket and passes through.
 
-Allowed `visibility` values:
+The Stop Hook:
 
-- `silent`
-- `notify`
-- `ask_confirmation`
+- does not parse an output-state tail;
+- does not require the model to emit hidden status fields;
+- does not create a candidate state;
+- does not run `cycle` itself;
+- issues at most one ticket per due turn.
 
-If `output_state = jinhua_candidate`, the Stop gate checks the invocation guard first. If jinhua already ran in the same turn, it skips duplicate triggering. If not, it returns one short `decision: block` reason so Codex can continue the current turn and the agent can consider the existing `cycle` / `log-signal` / `propose` flow. When `stop_hook_active` is true, it always returns `continue: true`.
+The interval is fixed at 8 and cannot be overridden by environment variables.
 
-The Stop gate also counts per conversation. Every 8 user turns by default, it returns one short continuation reason asking the agent to scan this turn and prior conversation for reusable lessons. This is the only periodic extra model continuation; normal hook runs remain local and do not call jinhua core commands.
+## Ready Attention
 
-Codex Stop hooks cannot rewrite the already-generated assistant message through the hook output schema. Jinhua parses the tail for trigger decisions; it does not claim to strip host output. Absolute hiding requires an outer wrapper.
+Ready attention is the bridge from a mature cluster to model attention:
 
-## Legacy Compatibility
+1. a non-Hook core command has already produced a `ready` cluster or pending gate;
+2. the next `UserPromptSubmit` reads that state without migration;
+3. one short context reminder asks the agent to run `cycle`;
+4. the agent must create one complete proposal, surface one pending gate, or state a concrete skip reason.
 
-These commands remain for older installations but are not the primary trigger path:
+The Hook itself never changes `ready` to `proposed`.
 
-```bash
-python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
-```
+## Claude Code
 
-The former `hooks/claude-codex-hooks.json` wrapper has been removed from the active tree. A local historical copy may exist under `.archive/legacy/`; it is not loaded, packaged, or part of the primary trigger path.
+`hooks/hooks.json` is the Claude Code plugin adapter. It uses the same three wrapper scripts and `${CLAUDE_PLUGIN_ROOT}`; no second trigger implementation or ledger exists.
 
-## Host Adapters
+Payload compatibility is checked through local protocol simulations in `scripts/test_adapters.py` and `scripts/test_trigger_layer.py`.
 
-Host-specific adapters live outside the core plugin:
+## Other Hosts
 
-- Claude Code: `hooks/hooks.json` uses the native plugin hook location and `${CLAUDE_PLUGIN_ROOT}` to call the same three wrappers.
-- OpenClaw: `adapters/openclaw/openclaw.plugin.json` packages the Skill adapter under `adapters/openclaw/skills/jinhua/`.
-- Hermes: `adapters/hermes/skills/jinhua/SKILL.md` is a Skill-only adapter.
-- TRAE: `adapters/trae/skills/jinhua/SKILL.md` is a Skill-only adapter.
-- WorkBuddy: `adapters/workbuddy/skills/jinhua/SKILL.md` is a Skill-only adapter.
+- OpenClaw: `adapters/openclaw/` packages a Skill/plugin wrapper.
+- Hermes: `adapters/hermes/` provides a Skill wrapper.
+- TRAE: `adapters/trae/` provides a Skill wrapper.
+- WorkBuddy: `adapters/workbuddy/` provides a Skill wrapper.
 
-Adapters must not create another ledger or bypass `signals -> clusters -> proposals -> user gate`.
+These adapters expose the canonical Jinhua Skill/CLI. Automatic Hook support depends on the host; adapters must not modify the core plugin to emulate unsupported lifecycle events.
 
 ## Safety Rules
 
-- Do not auto-apply Skill edits.
-- Do not bypass the placement-aware user gate: `project_rule`, `skill_patch`, `personal_global_skill`, `No`, or `Revision` displayed in the user's language.
-- Do not save original user text.
-- Do not copy raw project paths into global records.
-- Do not make hooks responsible for methodology judgment.
-- Do not run full `cycle` on every message.
-- Do not treat hook output as final proof of transferability.
+- Do not auto-log from Hooks.
+- Do not run full `cycle` on every prompt.
+- Do not store raw prompt text in runtime state.
+- Do not bypass `signals -> clusters -> proposals -> user gate`.
+- Do not auto-edit a Skill or project rule.
+- Do not treat correction classification as proof that a transferable lesson exists.

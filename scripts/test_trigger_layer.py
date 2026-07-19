@@ -56,21 +56,6 @@ def test_internal_context_stays_short_and_safe() -> None:
     assert len(context) < 260
 
 
-def test_output_state_parse_and_strip() -> None:
-    ok = jinhua.parse_output_state("Done.\n\noutput_state: ok\nvisibility: silent\n")
-    assert ok["valid"] is True
-    assert ok["output_state"] == "ok"
-    assert ok["user_visible_text"] == "Done."
-
-    candidate = jinhua.parse_output_state(
-        "正文\n\noutput_state: jinhua_candidate\nvisibility: silent\nreason: 这次纠错可能暴露出可复用方法论经验\n"
-    )
-    assert candidate["valid"] is True
-    assert candidate["output_state"] == "jinhua_candidate"
-    assert candidate["reason"] == "这次纠错可能暴露出可复用方法论经验"
-    assert "output_state" not in candidate["user_visible_text"]
-
-
 def test_invocation_guard_deduplicates_same_turn() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         args = args_for(Path(tmp))
@@ -97,28 +82,30 @@ def test_agent_direct_call_is_allowed_once() -> None:
         assert state["events"][0]["entry"] == "cycle"
 
 
-def test_stop_missing_tail_tickets_once() -> None:
+def test_stop_does_not_require_or_parse_output_tail() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         args = args_for(Path(tmp))
-        payload = {"session_id": "s1", "turn_id": "t3", "last_assistant_message": "Done."}
-        first = jinhua.codex_stop_output(payload, args)
-        second = jinhua.codex_stop_output(payload, args)
-        assert first == {"continue": True}
-        assert second == {"continue": True}
+        payload = {
+            "session_id": "s1",
+            "turn_id": "t3",
+            "last_assistant_message": "Done.\n\noutput_state: jinhua_candidate\nvisibility: silent",
+        }
+        assert jinhua.codex_stop_output(payload, args) == {"continue": True}
         state = jinhua.read_guard_state(args)
-        assert len(state["stop_tickets"]) == 1
-        assert state["stop_tickets"][0].startswith("missing_tail:")
+        assert state["stop_tickets"] == []
 
 
 def test_periodic_stop_is_per_session_and_light() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         args = args_for(Path(tmp))
-        for index in range(1, 8):
-            payload = {"session_id": "s1", "turn_id": f"u{index}", "prompt": "普通问题"}
-            output = jinhua.codex_user_prompt_submit_output(payload, args)
-            assert output == {"continue": True}
-            state = jinhua.read_guard_state(args)
-            assert state["sessions"][jinhua.hook_session_id(payload)]["periodic_stop_due"] is False
+        with patch.dict(os.environ, {"JINHUA_PERIODIC_STOP_INTERVAL": "1"}, clear=False):
+            assert jinhua.periodic_stop_interval() == 8
+            for index in range(1, 8):
+                payload = {"session_id": "s1", "turn_id": f"u{index}", "prompt": "普通问题"}
+                output = jinhua.codex_user_prompt_submit_output(payload, args)
+                assert output == {"continue": True}
+                state = jinhua.read_guard_state(args)
+                assert state["sessions"][jinhua.hook_session_id(payload)]["periodic_stop_due"] is False
 
         due_payload = {"session_id": "s1", "turn_id": "u8", "prompt": "普通问题"}
         due_output = jinhua.codex_user_prompt_submit_output(due_payload, args)
@@ -148,6 +135,29 @@ def test_periodic_stop_is_per_session_and_light() -> None:
         assert state["sessions"][jinhua.hook_session_id(stop_payload)]["periodic_stop_due"] is False
 
 
+def test_periodic_stop_skips_when_jinhua_already_ran() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        args = args_for(Path(tmp))
+        for index in range(1, 9):
+            jinhua.codex_user_prompt_submit_output(
+                {"session_id": "s1", "turn_id": f"u{index}", "prompt": "普通问题"},
+                args,
+            )
+        stop_payload = {"session_id": "s1", "turn_id": "a8"}
+        jinhua.invocation_guard(
+            args,
+            jinhua.hook_session_id(stop_payload),
+            jinhua.hook_turn_id(stop_payload),
+            "agent",
+            "cycle",
+            "cycle",
+            mark=True,
+        )
+        assert jinhua.codex_stop_output(stop_payload, args) == {"continue": True}
+        state = jinhua.read_guard_state(args)
+        assert state["sessions"][jinhua.hook_session_id(stop_payload)]["periodic_stop_due"] is False
+
+
 def test_codex_hook_config_uses_plugin_root_for_all_events() -> None:
     root = Path(jinhua.__file__).resolve().parents[1]
     config = json.loads((root / "hooks" / "codex-hooks.json").read_text(encoding="utf-8"))
@@ -160,6 +170,9 @@ def test_codex_hook_config_uses_plugin_root_for_all_events() -> None:
         assert "<jinhua-dir>" not in hook["command"]
         assert hook["command"] == f'python "${{CLAUDE_PLUGIN_ROOT}}/hooks/{script}"'
         assert hook["commandWindows"] == f'python "${{CLAUDE_PLUGIN_ROOT}}/hooks/{script}"'
+    config_text = json.dumps(config).lower()
+    assert "output state" not in config_text
+    assert "periodic review" in config_text
 
 
 def test_codex_payload_cwd_selects_runtime_project() -> None:
@@ -264,7 +277,7 @@ def test_ready_attention_surfaces_ready_clusters_without_mutating_ledger() -> No
         args = args_for(Path(tmp))
         jinhua.initialize_runtime(args, quiet=True)
         jinhua.write_cluster_state(args, {
-            "schema_version": "2.0",
+            "schema_version": "3.0",
             "updated_at": "",
             "clusters": {
                 "other:ready_example": {
@@ -295,7 +308,7 @@ def test_ready_attention_pending_gate_takes_priority() -> None:
         args = args_for(Path(tmp))
         jinhua.initialize_runtime(args, quiet=True)
         jinhua.write_cluster_state(args, {
-            "schema_version": "2.0",
+            "schema_version": "3.0",
             "updated_at": "",
             "clusters": {
                 "other:ready_example": {
@@ -318,30 +331,12 @@ def test_ready_attention_pending_gate_takes_priority() -> None:
         assert "surface one gate" in context
 
 
-def test_stop_candidate_skips_when_turn_already_called_jinhua() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        args = args_for(Path(tmp))
-        payload = {
-            "session_id": "s1",
-            "turn_id": "t4",
-            "last_assistant_message": "Done.\n\noutput_state: jinhua_candidate\nvisibility: silent\nreason: reusable correction",
-        }
-        jinhua.invocation_guard(
-            args,
-            jinhua.hook_session_id(payload),
-            jinhua.hook_turn_id(payload),
-            "agent",
-            "cycle",
-            "cycle",
-            mark=True,
-        )
-        output = jinhua.codex_stop_output(payload, args)
-        assert output == {"continue": True}
-
-
-def test_legacy_wake_check_is_not_primary_but_still_works() -> None:
-    assert jinhua.wake_check_result("为什么没触发jinhua.skill？")["legacy"] is True
-    assert jinhua.wake_check_result("Fix the typo in the heading.")["should_route"] is False
+def test_removed_trigger_commands_are_absent() -> None:
+    help_text = jinhua.build_parser().format_help()
+    for command in ["wake-check", "hook-user-prompt-submit", "parse-output-state"]:
+        assert command not in help_text
+    assert not hasattr(jinhua, "parse_output_state")
+    assert not hasattr(jinhua, "wake_check_result")
 
 
 def test_old_hook_is_not_manifest_primary_path() -> None:
@@ -356,11 +351,11 @@ def test_old_hook_is_not_manifest_primary_path() -> None:
 if __name__ == "__main__":
     test_input_correction_classifier()
     test_internal_context_stays_short_and_safe()
-    test_output_state_parse_and_strip()
     test_invocation_guard_deduplicates_same_turn()
     test_agent_direct_call_is_allowed_once()
-    test_stop_missing_tail_tickets_once()
+    test_stop_does_not_require_or_parse_output_tail()
     test_periodic_stop_is_per_session_and_light()
+    test_periodic_stop_skips_when_jinhua_already_ran()
     test_codex_hook_config_uses_plugin_root_for_all_events()
     test_codex_payload_cwd_selects_runtime_project()
     test_hook_payload_accepts_utf8_bom()
@@ -370,7 +365,6 @@ if __name__ == "__main__":
     test_hook_outputs_only_use_codex_wire_keys()
     test_ready_attention_surfaces_ready_clusters_without_mutating_ledger()
     test_ready_attention_pending_gate_takes_priority()
-    test_stop_candidate_skips_when_turn_already_called_jinhua()
-    test_legacy_wake_check_is_not_primary_but_still_works()
+    test_removed_trigger_commands_are_absent()
     test_old_hook_is_not_manifest_primary_path()
     print("trigger-layer tests passed")

@@ -2,6 +2,36 @@
 
 > 本文件是中文更新说明；英文辅助版本见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 2.0.0 - 2026-07-19
+
+- 把实际加载的 Skill 控制面从 302 行、15,415 字节精简为只保留硬规则和按需路由的控制文件，同时保留触发、阈值、落点和用户确认语义。
+- 触发层收敛为：本地纠错/就绪提醒、Agent 当前轮直接调用与同轮保护、每个会话固定 8 轮 Stop 回顾。
+- 删除输出状态尾巴，以及 `wake-check`、`hook-user-prompt-submit`、`parse-output-state` 命令。
+- 删除提案 decision/confidence、operator 晋升脚手架和种子、压缩删除、全局模糊合并建议、时间冷却和 force 旁路。
+- 提案必须包含具体目标、完整 Markdown 修改块和具体风险；`skill_patch` 与 `project_rule` 必须有具体所有者。
+- apply 命令改为纯记账：Agent 先用宿主原生工具修改并验证，再记录 `applied_target` 和 `edit_summary`。
+- 新增本地 schema 3.0、全局 schema 2.0 的幂等自动迁移；数据损坏时改写前中止，已有信号不丢失。
+- 新增标准库核心闭环测试，并同步 Codex、Claude Code、OpenClaw、Hermes、TRAE、WorkBuddy 包装。
+
+### 删除的公开命令
+
+- `wake-check`
+- `hook-user-prompt-submit`
+- `parse-output-state`
+- `compact`
+- `global-merge-suggestions`
+
+### 删除的公开参数
+
+- `--decision`
+- `--confidence`
+- `--force`
+- `--target-skill-path`
+- apply 阶段的 `--patch`
+- `--insert-after`
+- `--cooldown-days`
+- `--cooldown-signals`
+
 ## 2026-07-19 项目导航与归档边界
 
 - 新增简短的智能体说明、项目规范和逐文件索引，让后续任务只读取相关 active 文件，不扫描运行态和历史文件。
