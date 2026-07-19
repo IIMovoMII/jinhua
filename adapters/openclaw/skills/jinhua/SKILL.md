@@ -24,7 +24,8 @@ python "$JINHUA_ROOT/scripts/jinhua.py" --project-root "$PWD" cycle
 Then follow the canonical loop:
 
 ```text
-cycle -> log-signal -> cycle -> propose/global-propose -> user gate -> apply/reject -> cycle -> validate
+cycle -> log-signal -> cycle -> propose/global-propose -> user gate
+      -> host-native edit and verification -> apply/reject record -> cycle -> validate
 ```
 
-Do not write signals unless the lesson can become a reusable `trigger` plus `action`. Do not apply edits without the user gate.
+Do not write signals unless the lesson can become a reusable `trigger` plus `action`. Apply commands only record an edit that the host already completed and verified.

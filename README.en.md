@@ -1,138 +1,185 @@
-# jinhua
+# Jinhua
 
 Languages: English | [简体中文](README.md)
 
-`jinhua` is a small, deterministic Skill evolution loop for Codex and Claude Code.
+Jinhua is a local methodology-learning tool for coding agents. It turns reusable workflow corrections, verified failures, and successful methods into project rules or Skill improvements that the user explicitly approves.
 
-It helps the model notice reusable methodology signals during real work, cluster them locally, promote compressed evidence across projects, and ask the user only when a concrete Skill Evolution Proposal is ready.
+It is not chat history, personal memory, or an automatic editor. Jinhua stores sanitized methodology evidence only. Hooks never auto-log experience, and every rule change remains behind the user gate.
+
+Product shape:
+
+- Codex: plugin + three local trigger gates + Skill + CLI.
+- Claude Code: native hook adapter using the same Skill and CLI.
+- OpenClaw, Hermes, TRAE, and WorkBuddy: thin host adapters with no change to the core loop.
 
 Chinese visual guide: [docs/jinhua-logic.html](docs/jinhua-logic.html)
 
-Project navigation: agents should start with [AGENTS.md](AGENTS.md); structural and maintenance rules live in [PROJECT_RULES.md](PROJECT_RULES.md); file ownership is listed in [PROJECT_INDEX.md](PROJECT_INDEX.md).
-
-The user gate is placement-aware. In Chinese conversations, jinhua should display Chinese labels with canonical ids:
+## Complete Loop
 
 ```text
-项目规则(project_rule) / 增强已有 Skill(skill_patch) / 个人全局 Skill(personal_global_skill) / 拒绝(No) / 修订(Revision)
+Trigger layer notices a turn worth checking
+        ↓
+cycle: read local/global state and surface pending gates first
+        ↓
+Write gate: can the lesson become reusable trigger + action?
+        ├─ No  → skip without writing
+        └─ Yes → log-signal
+                    ↓
+              local clustering
+                    ↓
+        not ready → keep accumulating quietly
+        ready     → propose / global-propose
+                    ↓
+              placement-aware user gate
+        ├─ project_rule
+        ├─ skill_patch
+        ├─ personal_global_skill
+        ├─ Revision → rewrite and ask again
+        └─ No → cooldown until 5 new same-cluster signals
+                    ↓
+On acceptance, the agent edits and verifies with host-native tools
+                    ↓
+apply-proposal / global-apply records the completed adoption only
+                    ↓
+cycle → validate
 ```
 
-User-facing dialogue follows the user's current conversation language. Durable data, CLI identifiers, JSON fields, and generated Skill files may remain English unless the user asks otherwise.
-
-## Core Loop
+The core data flow remains:
 
 ```text
-cycle
--> log-signal
--> cycle
--> propose or global-propose when ready
--> user gate
--> apply/reject
--> cycle
--> validate
+signals -> clusters -> proposals -> user gate
 ```
 
-`cycle` is the automatic checkpoint. It initializes missing runtime state, scans local clusters, imports local signals into the global promotion layer, surfaces pending gates, and prints proposal skeleton hints for ready clusters.
+The trigger layer cannot bypass this flow or the user gate.
 
-## Wake-Up Mechanism
+## Three Trigger Gates
 
-`jinhua` is not a background daemon. The core loop still starts with `cycle`; the trigger layer only helps the host notice turns that may deserve jinhua.
+### Gate 1: Local Input Classification
 
-The Codex plugin path uses three gates:
-
-- Gate 1: `UserPromptSubmit` locally classifies user correction as `none`, `possible_user_correction`, or `strong_user_correction`, and injects only a tiny internal hint.
-- Gate 2: the agent may directly call jinhua in the current turn; the `invocation guard` only prevents duplicate same-turn calls.
-- Gate 3: `Stop` parses a tiny output-state tail such as `output_state: ok` or `output_state: jinhua_candidate`; when a check is needed it uses Codex's supported `decision: block` plus a short `reason` to request one continuation, after checking the guard.
-
-Gate 1 also reads existing runtime state locally. If ready clusters or pending user gates exist, it injects one short next-turn reminder: run `cycle`, then create one proposal or state a concrete skip reason. This is a read-only JSON/JSONL check; it does not run `cycle`, log signals, or create proposals.
-
-Gate 3 also keeps a per-conversation counter and, every 8 user turns, requests one short fallback check of this turn and prior conversation for reusable lessons. Ordinary turns add no model call; only a due periodic check or an existing candidate requests one continuation, and `stop_hook_active` is always passed through to prevent loops.
-
-The trigger layer never writes `log-signal`, creates proposals, edits Skills, or bypasses the user gate. Hook stdout uses only Codex's official wire fields and does not expose internal state keys.
-
-Codex hook config lives at:
+`UserPromptSubmit` uses local Python rules before the main model handles the prompt. It classifies likely workflow, verification, tool/Skill, or missed-procedure corrections as:
 
 ```text
-hooks/codex-hooks.json
+none
+possible_user_correction
+strong_user_correction
 ```
 
-It calls:
+On a match it adds one short internal hint to the normal model call. It also reads existing ready clusters and pending gates and counts unique user turns per session. It never runs `cycle`, migrates core data, writes signals/proposals, or stores the user's original prompt.
 
-```bash
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py"
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
+### Gate 2: Direct Agent Call And Invocation Guard
+
+The agent may enter Jinhua immediately when the user explicitly asks to crystallize a method or when a transferable workflow lesson is clear.
+
+`PostToolUse` records whether Jinhua already ran in the current turn so input attention, direct calls, and periodic checks cannot duplicate work. Guard results are:
+
+```text
+allow
+already_handled
+skip_duplicate
+block_loop
 ```
 
-The wrappers resolve the project root from the hook payload first, including common nested fields, then from supported project-directory environment variables, and finally from the hook process working directory. If that fallback is the installed plugin directory itself, the hook skips runtime writes instead of placing `.jinhua` in the plugin.
+### Gate 3: Fixed Eight-Turn Review
 
-After a plugin update, Codex may first mark a hook as `modified` or `untrusted`. In that state the hook is discovered but does not execute; Codex must trust the current hook content first. This trust state belongs to the host configuration, not to the Jinhua experience ledger.
+`Stop` requests one short review every 8 unique user turns in each session. The review covers the current turn and prior conversation. Ordinary turns run local code only; one extra model continuation occurs only when the interval is due.
 
-The old `wake-check` and `hook-user-prompt-submit` commands remain as legacy compatibility entries, but they are no longer the recommended primary path.
+Stop no longer requires or parses an output-state tail. It passes through when `stop_hook_active` is set or when Jinhua already ran in that turn, preventing loops and duplicate calls.
 
-This repo now ships the plugin-layer files needed for that trust flow:
+All three gates only classify, count, remind, and deduplicate. They never write signals, create proposals, or edit rules.
 
-- `.codex-plugin/plugin.json`
-- `.agents/plugins/marketplace.json`
-- `.claude-plugin/plugin.json`
-- `.claude-plugin/marketplace.json`
+See [references/hook-integration.md](references/hook-integration.md) for host protocol details.
 
-In other words, `jinhua` is no longer just a Skill repo: Codex can load hooks through the plugin layer; Claude Code and other Skill/CLI-capable agents can still use the core loop, with hooks configured through their own platform conventions.
+## Recordability
 
-## Other Agent Adapters
+A lesson must contain both:
 
-Adapters live under `adapters/`. They do not change the core jinhua loop or add a second experience system.
+- `trigger`: the future condition where it applies.
+- `action`: the reusable action to take.
 
-| Agent | Adapter | Automation level |
-| --- | --- | --- |
-| Claude Code | `hooks/hooks.json` | Native plugin hook adapter that reuses the three-gate wrappers. |
-| OpenClaw | `adapters/openclaw/openclaw.plugin.json` + Skill | OpenClaw plugin/Skill packaging. |
-| Hermes | `adapters/hermes/skills/jinhua/SKILL.md` | Skill adapter. |
-| TRAE | `adapters/trae/skills/jinhua/SKILL.md` | Skill adapter. |
-| WorkBuddy | `adapters/workbuddy/skills/jinhua/SKILL.md` | Skill adapter. |
+At least one must also be true:
 
-Claude Code and OpenClaw get dedicated adapter files. Hermes, TRAE, and WorkBuddy use lightweight Skill adapters; automatic hooks depend on the host's own supported configuration.
+- The user corrected workflow, reasoning direction, verification, Skill/tool choice, or a missed procedure.
+- The same reusable method repeated in the current project.
+- A repaired failure exposed a transferable cause.
+- A successful path exposed a reusable method.
+- The user explicitly asked to preserve, crystallize, write, or apply the method elsewhere.
 
-## Rules
+Skip one-off bugs, ordinary output preferences, private facts, raw user text, credentials, local paths, temporary commands, local API details, and conversation-only lessons.
 
-jinhua records only reusable methodology signals. A signal should have a future `trigger` plus `action`.
+The agent owns semantic judgment and abstraction. The CLI only validates, stores, counts, clusters, migrates, and records gate outcomes.
 
-Record when at least one is true:
+## Strength And Readiness
 
-- User correction changes the model's reasoning, verification standard, or workflow.
-- The same method repeats in the current project.
-- A fixed failure exposes a transferable cause.
-- A success path exposes a reusable method.
-- The user explicitly asks to remember, crystallize, write into a Skill, or apply everywhere.
+`strength` is fixed:
 
-Skip one-off preferences, ordinary bugs, local paths, temporary commands, local API details, and lessons useful only in the current chat.
-
-Strength is simple:
-
-- `1`: ordinary observation.
+- `1`: ordinary self-observation.
 - `2`: clear user correction or repeated pattern.
 - `3`: high-cost failure, repeated rework, or explicit crystallization request.
 
-Local readiness:
+A local cluster becomes ready at:
 
-- `signal_count >= 3`, or
-- `strength_sum >= 5`, or
-- explicit immediate user request, or
-- reusable urgent high-cost failure.
+```text
+signal_count >= 3
+or
+strength_sum >= 5
+```
 
-Global readiness:
+`log-signal --immediate` is the only immediate channel and is reserved for an explicit crystallization request or urgent reusable high-cost failure.
 
-- Same normalized `method_fingerprint`.
-- Default: 3 projects, 5 evidence records, strength 7.
-- Fast path: 2 projects, strength 6, with strong correction or high-strength evidence.
+Ready means evidence is sufficient for a proposal, not that a rule has changed. The next ready-attention check brings it back to the agent, which must create a complete proposal or state a concrete skip reason.
 
-Placement is decided in this order:
+## Cross-Project Promotion
 
-1. `personal_global_skill`: all-project request, new standalone Skill, independent workflow, or global evidence.
-2. `skill_patch`: belongs in an existing local Skill; jinhua recommends the concrete Skill and path.
-3. `project_rule`: current-project need that is not clearly global or an existing Skill patch.
-4. Otherwise: do not write.
+`cycle` imports compressed active local signals into the personal global runtime. Global data stores hashed project identity and sanitized method evidence, never raw project paths.
 
-For `project_rule`, jinhua recommends a target file with `recommended_project_rule_file`. It prefers existing project files and supports `--agent-profile` / `JINHUA_AGENT_PROFILE` for `codex`, `claude`, `copilot`, `trae`, `hermes`, `openclaw`, `workbuddy`, and generic/custom fallback. It does not auto-create project rule files.
+Exact grouping prefers a normalized `operator + action` `method_fingerprint`. The CLI does not perform fuzzy similarity merging; the agent is responsible for compressing semantically identical methods into the same action.
+
+Ordinary global readiness:
+
+```text
+3 projects + 5 evidence records + strength 7
+```
+
+Fast path:
+
+```text
+2 projects + strength 6
++ at least 2 high-strength or user-correction records
+```
+
+## Placement And User Gate
+
+Choose by strong evidence first and use the lightest fallback:
+
+1. `personal_global_skill`: explicit all-project behavior, a new standalone Skill, an independent workflow, or mature global evidence.
+2. `skill_patch`: the lesson clearly belongs to an existing Skill. The proposal must name the concrete Skill and path.
+3. `project_rule`: current-project need without a clear Skill owner or global scope. The proposal must recommend a concrete project rule file.
+
+The normal distribution should be: skip most, project rules often, Skill patches less often, personal global Skills least often.
+
+In Chinese conversations the user gate is:
+
+```text
+项目规则(project_rule)
+增强已有 Skill(skill_patch)
+个人全局 Skill(personal_global_skill)
+拒绝(No)
+修订(Revision)
+```
+
+Every proposal requires a concrete target, a complete Markdown patch with a heading, a concrete risk, representative evidence, placement, and placement reason. Placeholders cannot enter the user gate.
+
+If the user chooses a different placement, the agent revises the proposal first so the owner, target, patch, and risk match the new placement.
+
+## Adoption Is Ledger-Only
+
+After the user accepts:
+
+1. The agent edits the target with Codex, Claude Code, or another host's native tools.
+2. The agent verifies the actual change.
+3. Only then does it call `apply-proposal` or `global-apply` with the applied target and edit summary.
+
+The CLI has no built-in Markdown writer. A failed edit or verification must never be recorded as adopted.
 
 ## Quick Start
 
@@ -140,128 +187,56 @@ For `project_rule`, jinhua recommends a target file with `recommended_project_ru
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 ```
 
-Log a structured reusable methodology signal:
+Record a signal that already passed the write gate:
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> log-signal \
   --source-type user_correction \
-  --summary "Read README and relevant source before recommending reusable GitHub projects" \
+  --summary "Read the README and relevant source before recommending a project" \
   --operator verification_path \
-  --cluster-key verification_path:read_readme_and_source_before_recommending_projects \
-  --context "researching reusable tools" \
+  --cluster-key verification_path:verify_projects_before_recommending \
+  --context "evaluating reusable external projects" \
   --strength 2 \
-  --trigger "recommending external projects for adoption" \
-  --action "verify README and relevant source before recommending" \
-  --transfer-conditions "tool, library, Skill, or agent project recommendations" \
-  --negative-cases "quick pointers where the user did not ask for adoption judgment" \
-  --verification-path "cite README and source files used" \
-  --confidence 0.8 \
+  --trigger "recommending an external project for adoption" \
+  --action "read the README and relevant source before recommending" \
+  --transfer-conditions "Skill, library, tool, or agent-project recommendations" \
+  --negative-cases "quick name-only pointers" \
+  --verification-path "identify the README and source inspected" \
   --auto-init
 ```
 
-`source-type` can be `user_correction`, `success_trace`, or `failure_trace`.
+`propose` requires `--target`, `--patch`, and `--risk`; the patch must be a complete Markdown block with a heading.
 
-Re-run:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
-```
-
-When a local cluster is ready:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
-  --cluster-key verification_path:read_readme_and_source_before_recommending_projects \
-  --decision proposed_edit \
-  --placement skill_patch \
-  --target "target-skill/SKILL.md / research workflow" \
-  --patch "## Source-Backed Recommendations
-
-When recommending reusable external projects for adoption, verify the README and relevant source before claiming usefulness." \
-  --risk "Can add work when the user only wants quick pointers."
-```
-
-Placement choices:
-
-- `project_rule`: lightweight current-project rule.
-- `skill_patch`: enhance a concrete existing local Skill. jinhua recommends the best matching local Skill and path; the user should not have to search manually.
-- `personal_global_skill`: personal global Skill or all-project rule.
-
-If the user chooses a placement:
+After native editing and verification, record adoption:
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal \
-  --proposal-id <prop_id> \
+  --proposal-id <proposal-id> \
   --placement skill_patch \
-  --target-skill target-skill \
-  --target-skill-path "<target-skill-dir>/SKILL.md" \
-  --insert-after "## Use This When" \
-  --patch "## Source-Backed Recommendations
-
-When recommending reusable external projects for adoption, verify the README and relevant source before claiming usefulness." \
-  --summary "Added source-backed recommendation rule"
+  --applied-target "<skill-dir>/SKILL.md" \
+  --summary "Added and verified the approved source-check rule"
 ```
 
-If the user says no:
+See [references/cli-usage.md](references/cli-usage.md) for the complete command contract.
 
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal \
-  --proposal-id <prop_id> \
-  --reason "Too broad"
-```
-
-Validate:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
-```
-
-## Commands
-
-Primary workflow:
-
-- `cycle`
-- `classify-input`
-- `codex-user-prompt-submit`
-- `codex-post-tool-use`
-- `codex-stop`
-- `parse-output-state` (read-only tail parsing; it does not rewrite host output)
-- `guard`
-- `wake-check` (legacy)
-- `hook-user-prompt-submit` (legacy)
-- `log-signal`
-- `list-clusters`
-- `propose`
-- `apply-proposal`
-- `reject-proposal`
-- `global-cycle`
-- `global-status`
-- `global-propose`
-- `global-merge-suggestions`
-- `global-apply`
-- `global-reject`
-- `compact`
-- `status`
-- `validate`
-
-The CLI exposes only the commands above.
-
-## Runtime Data
+## Runtime And Migration
 
 Project-local:
 
 ```text
-.jinhua/data/
-|-- signals.jsonl
-|-- cluster-state.json
-|-- proposals.jsonl
-|-- adopted-edits.jsonl
-|-- rejected-proposals.jsonl
-|-- crystallized-operators.jsonl
-`-- evolution-state.json
+<project-root>/.jinhua/
+|-- data/
+|   |-- signals.jsonl
+|   |-- cluster-state.json
+|   |-- proposals.jsonl
+|   |-- adopted-edits.jsonl
+|   |-- rejected-proposals.jsonl
+|   `-- evolution-state.json
+`-- runtime/
+    `-- invocation-guard.json
 ```
 
-Global promotion:
+Personal global runtime:
 
 ```text
 <jinhua-dir>/global-data/
@@ -274,23 +249,42 @@ Global promotion:
 `-- global-state.json
 ```
 
-No setup is required after installation. `cycle` creates the runtime state when needed.
+Jinhua 2.0 uses local schema `3.0` and global schema `2.0`. The first non-Hook core command migrates older runtime automatically. Migration preserves signals, evidence, ids, proposal states, and adoption outcomes while removing obsolete fields and operator-promotion seed data. Signals are retained permanently; there is no compaction command.
 
-If one workspace contains unrelated projects or conversations, pass `--project-id <stable-key>` or set `JINHUA_PROJECT_ID` to separate their global promotion evidence. The raw key is hashed before storage.
+Migration is idempotent. Malformed JSON/JSONL aborts before any rewrite.
 
-## Design Boundaries
+Use `--project-id <stable-key>` or `JINHUA_PROJECT_ID` when unrelated projects or conversations share one workspace. The raw key is used only to derive a hash.
 
-- No daemon.
-- No external database.
-- No vector store.
-- No dashboard.
-- No user gate bypass.
-- User-facing Skill dialogue follows the user's current language; executable identifiers stay English.
+See [references/runtime-schema.md](references/runtime-schema.md) and [references/data-policy.md](references/data-policy.md).
 
-## License
+## Host Adapters
 
-MIT.
+| Host | Entry | Scope |
+| --- | --- | --- |
+| Codex | `.codex-plugin/plugin.json` + `hooks/codex-hooks.json` | three trigger gates, Skill, CLI |
+| Claude Code | `.claude-plugin/plugin.json` + `hooks/hooks.json` | native hooks, Skill, CLI |
+| OpenClaw | `adapters/openclaw/` | plugin/Skill wrapper |
+| Hermes | `adapters/hermes/` | Skill wrapper |
+| TRAE | `adapters/trae/` | Skill wrapper |
+| WorkBuddy | `adapters/workbuddy/` | Skill wrapper |
 
-## Contributing
+Outside Codex and Claude Code, automatic triggering depends on host support. Adapters never change the Jinhua core.
 
-See [CONTRIBUTING.en.md](CONTRIBUTING.en.md), [SECURITY.en.md](SECURITY.en.md), and [CODE_OF_CONDUCT.en.md](CODE_OF_CONDUCT.en.md).
+## Token And Attention Cost
+
+- Input classification, ready attention, turn counting, and invocation guarding are local and add no separate model call.
+- Ordinary turns do not load the full Jinhua Skill or run `cycle`.
+- The fixed eight-turn fallback requests at most one short periodic continuation.
+- Once selected, the trimmed `SKILL.md` is the only automatic control surface; references are read on demand.
+- There is no forced output tail, daemon, external database, or vector retrieval.
+
+## Project Navigation
+
+- [AGENTS.md](AGENTS.md)
+- [PROJECT_RULES.md](PROJECT_RULES.md)
+- [PROJECT_INDEX.md](PROJECT_INDEX.md)
+- [CONTRIBUTING.en.md](CONTRIBUTING.en.md)
+- [SECURITY.en.md](SECURITY.en.md)
+- [CODE_OF_CONDUCT.en.md](CODE_OF_CONDUCT.en.md)
+
+License: MIT.

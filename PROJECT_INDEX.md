@@ -1,108 +1,104 @@
 # 项目文件索引
 
-这是 Jinhua 的逐文件导航。日常修改先读 [AGENTS.md](AGENTS.md) 和 [PROJECT_RULES.md](PROJECT_RULES.md)；本索引用于确认文件职责，不要求每次任务全量阅读。
+日常先读 [AGENTS.md](AGENTS.md) 和 [PROJECT_RULES.md](PROJECT_RULES.md)。本索引用于定位权威文件，不要求每次任务全量读取。
 
 ## 快速定位
 
 | 任务 | 先读 | 再读 |
 | --- | --- | --- |
-| Skill 方法论流程 | `SKILL.md` | `references/data-policy.md`、`references/maintenance.md` |
-| 中文用户说明 | `README.md` | `references/zh-CN/` |
-| Codex 触发层 | `hooks/codex-hooks.json` | `hooks/codex_*.py`、`references/hook-integration.md`、`scripts/jinhua.py` 的触发层函数 |
-| Claude Code 适配 | `hooks/hooks.json` | `adapters/README.md`、`references/hook-integration.md` |
-| 核心账本/闭环 | `scripts/jinhua.py` | `SKILL.md`、`references/cli-usage.md` |
-| 数据结构 | `references/operator-json-schema.md` | `references/data-policy.md`、`scripts/jinhua.py` 的 validate 函数 |
-| 插件发布 | `.codex-plugin/plugin.json` | `.agents/plugins/marketplace.json`、`CONTRIBUTING.md` |
-| 文件归属/结构调整 | `PROJECT_RULES.md` | 本文件、`PROJECT_MAP.md` |
+| Skill 方法论流程 | `SKILL.md` | `references/data-policy.md` |
+| 中文用户说明 | `README.md` | `SKILL.zh-CN.md`、`references/zh-CN/` |
+| 核心账本与闭环 | `scripts/jinhua.py` | `scripts/test_core_loop.py`、`references/cli-usage.md` |
+| Codex 触发层 | `hooks/codex-hooks.json` | `hooks/codex_*.py`、`scripts/test_trigger_layer.py`、`references/hook-integration.md` |
+| Claude Code 适配 | `hooks/hooks.json` | `scripts/test_adapters.py`、`adapters/README.md` |
+| 数据结构与迁移 | `references/runtime-schema.md` | `scripts/test_core_loop.py`、`references/data-policy.md` |
+| 插件发布 | `.codex-plugin/plugin.json` | `.agents/plugins/marketplace.json`、`PROJECT_RULES.md` |
+| 文件归属调整 | `PROJECT_RULES.md` | 本文件、`PROJECT_MAP*.md` |
 
-## Active 文件
-
-### 控制面和用户文档
+## 控制面和用户文档
 
 | 文件 | 职责 |
 | --- | --- |
-| `SKILL.md` | 英文 active control plane；定义触发边界、信号记录、聚类、提案、用户确认和全局晋升规则。 |
-| `SKILL.zh-CN.md` | 面向中文用户的 Skill 运行逻辑说明，不替代 `SKILL.md`。 |
-| `README.md` | 中文默认入口，解释产品形态、三道触发闸门、命令、数据和边界。 |
-| `README.en.md` | README 的英文辅助版本。 |
-| `docs/jinhua-logic.html` | 静态可视化说明页；用于人类阅读，不是运行入口，也不覆盖 Hook 协议细节。 |
-| `CHANGELOG.md` | 英文历史变更记录。 |
-| `CHANGELOG.zh-CN.md` | 中文历史变更记录。 |
+| `SKILL.md` | 英文 active control plane；只保留运行硬约束和 reference 路由。 |
+| `SKILL.zh-CN.md` | 中文运行逻辑说明，不替代控制面。 |
+| `README.md` | 中文默认用户入口，说明完整闭环、触发、阈值、落点、迁移和成本。 |
+| `README.en.md` | 英文辅助版本。 |
+| `docs/jinhua-logic.html` | 中文静态逻辑图，不参与运行。 |
+| `CHANGELOG.md` | 英文历史变更。 |
+| `CHANGELOG.zh-CN.md` | 中文默认更新日志。 |
 | `PROJECT_MAP.md` | 英文产品形态和目录概览。 |
 | `PROJECT_MAP.zh-CN.md` | 中文产品形态和目录概览。 |
 
-### CLI、核心闭环和测试
+## CLI、核心闭环和测试
 
 | 文件 | 职责 |
 | --- | --- |
-| `scripts/jinhua.py` | 唯一 CLI：运行态初始化、信号、聚类、全局导入、提案、用户确认结果、压缩、验证，以及只读触发层入口。 |
-| `scripts/test_trigger_layer.py` | 输入分类、项目根解析、周期 Stop、调用保护、输出协议和旧兼容命令测试。 |
-| `scripts/test_adapters.py` | Claude Code、OpenClaw、Hermes、TRAE、WorkBuddy 适配层冒烟测试。 |
-| `data/crystallized-operators.jsonl` | 随项目发布的 operator 种子数据；不是当前项目的运行态账本。 |
+| `scripts/jinhua.py` | 唯一 CLI：初始化、迁移、信号、聚类、全局导入、完整提案、确认结果纯记账、状态和验证。 |
+| `scripts/test_core_loop.py` | 标准库端到端测试：阈值、提案、确认门、冷却、全局路径、迁移和废弃接口。 |
+| `scripts/test_trigger_layer.py` | 纠错分类、项目根解析、ready-attention、调用保护、每会话 8 轮和 Stop 防循环。 |
+| `scripts/test_adapters.py` | Claude Code、OpenClaw、Hermes、TRAE、WorkBuddy 包装冒烟测试。 |
 
-### Codex 和其他宿主触发层
+## Codex 和宿主适配
 
 | 文件 | 职责 |
 | --- | --- |
-| `hooks/codex-hooks.json` | Codex 插件 manifest 引用的三个 Hook 定义。 |
-| `hooks/codex_user_prompt_submit.py` | UserPromptSubmit 薄 wrapper，转发输入 payload。 |
-| `hooks/codex_post_tool_use.py` | PostToolUse 薄 wrapper，转发工具调用 payload。 |
-| `hooks/codex_stop.py` | Stop 薄 wrapper，转发输出状态和周期检查 payload。 |
-| `hooks/hooks.json` | Claude Code 原生 Hook 适配，复用上面三个 wrapper。 |
-| `adapters/README.md` | 宿主适配范围和边界。 |
+| `hooks/codex-hooks.json` | Codex 三个 command Hook 定义。 |
+| `hooks/codex_user_prompt_submit.py` | 第一道闸门薄 wrapper。 |
+| `hooks/codex_post_tool_use.py` | 第二道调用保护薄 wrapper。 |
+| `hooks/codex_stop.py` | 第三道固定周期回顾薄 wrapper。 |
+| `hooks/hooks.json` | Claude Code 原生 Hook 适配，复用同一 wrapper。 |
+| `skills/jinhua/SKILL.md` | Codex 插件内薄 Skill 入口，委托给根目录 `SKILL.md`。 |
+| `adapters/README.md` | 各宿主支持范围和边界。 |
 | `adapters/openclaw/openclaw.plugin.json` | OpenClaw 插件包装清单。 |
 | `adapters/openclaw/skills/jinhua/SKILL.md` | OpenClaw Skill 入口。 |
 | `adapters/hermes/skills/jinhua/SKILL.md` | Hermes Skill 入口。 |
 | `adapters/trae/skills/jinhua/SKILL.md` | TRAE Skill 入口。 |
 | `adapters/workbuddy/skills/jinhua/SKILL.md` | WorkBuddy Skill 入口。 |
-| `skills/jinhua/SKILL.md` | Codex 插件内的薄 Skill 入口，指向根目录权威流程。 |
 
-### 详细参考
+## 详细参考
 
 | 文件 | 职责 |
 | --- | --- |
-| `references/cli-usage.md` | CLI 命令、参数和闭环调用顺序。 |
-| `references/data-policy.md` | 可记录/不可记录的数据和本地/全局边界。 |
-| `references/hook-integration.md` | Codex 三道触发闸门、Hook 协议、信任边界和宿主适配。 |
-| `references/maintenance.md` | 长期维护、文档同步、架构和打包规则。 |
-| `references/operator-json-schema.md` | operator 种子和信号结构约定。 |
+| `references/cli-usage.md` | 当前 CLI 命令、参数和状态变化。 |
+| `references/data-policy.md` | 写入门、本地/全局边界、隐私与保留策略。 |
+| `references/runtime-schema.md` | 本地 3.0、全局 2.0 schema 和迁移规则。 |
+| `references/hook-integration.md` | 三道触发闸门、宿主协议和信任边界。 |
+| `references/maintenance.md` | 长期维护、打包和发布规则。 |
 | `references/zh-CN/cli-usage.md` | CLI 中文解释。 |
 | `references/zh-CN/data-policy.md` | 数据政策中文解释。 |
-| `references/zh-CN/glossary.md` | `cycle`、`cluster_key`、`verification_path` 等术语入口。 |
+| `references/zh-CN/runtime-schema.md` | 运行态结构和迁移中文解释。 |
 | `references/zh-CN/hook-integration.md` | 触发层中文解释。 |
 | `references/zh-CN/maintenance.md` | 维护规则中文解释。 |
-| `references/zh-CN/operator-json-schema.md` | 数据结构中文解释。 |
+| `references/zh-CN/glossary.md` | 命令、参数、状态和字段术语表。 |
 
-### 插件、开源和工程文件
+## 插件、开源和工程文件
 
 | 文件/目录 | 职责 |
 | --- | --- |
-| `.codex-plugin/plugin.json` | Codex 插件清单，声明 Skill 和 Codex Hook。 |
-| `.agents/plugins/marketplace.json` | Codex 个人 marketplace 的公开发现入口。 |
+| `.codex-plugin/plugin.json` | Codex 插件清单，声明 Skill 和 Hook。 |
+| `.agents/plugins/marketplace.json` | Codex personal marketplace 发现入口。 |
 | `.claude-plugin/plugin.json` | Claude Code 插件清单。 |
 | `.claude-plugin/marketplace.json` | Claude Code marketplace 清单。 |
 | `.github/ISSUE_TEMPLATE/` | GitHub Issue 模板。 |
-| `.github/PULL_REQUEST_TEMPLATE.md` | GitHub PR 检查项和说明模板。 |
-| `.editorconfig` | 编辑器基础格式。 |
-| `.gitattributes` | Git 属性。 |
-| `.gitignore` | 运行态、缓存、归档和本地文件排除规则。 |
+| `.github/PULL_REQUEST_TEMPLATE.md` | PR 验证和隐私检查模板。 |
+| `.gitignore` | 排除运行态、缓存和本地归档。 |
 | `LICENSE` | MIT 许可证。 |
-| `CONTRIBUTING.md` / `CONTRIBUTING.en.md` | 中英文贡献指南。 |
-| `CODE_OF_CONDUCT.md` / `CODE_OF_CONDUCT.en.md` | 中英文行为准则。 |
-| `SECURITY.md` / `SECURITY.en.md` | 中英文安全政策。 |
+| `CONTRIBUTING*.md` | 中英文贡献指南。 |
+| `CODE_OF_CONDUCT*.md` | 中英文行为准则。 |
+| `SECURITY*.md` | 中英文安全政策。 |
 
 ## 不要当作源码读取
 
 | 目录 | 说明 |
 | --- | --- |
-| `.jinhua/` | 当前项目的本地信号、聚类、提案、应用记录和触发层运行态；保留使用，但不作为项目实现依据，也不提交。 |
-| `global-data/` | 个人全局晋升运行态；保留使用，但不打包、不提交。 |
-| `.archive/` | 历史兼容文件和可再生缓存的本地归档；不运行、不提交，除非任务明确要求恢复历史。 |
-| `__pycache__/`、`*.pyc` | Python 可再生缓存；不作为源码依据。 |
+| `.jinhua/` | 当前项目本地经验和触发运行态；保留使用，不提交，不作为实现依据。 |
+| `global-data/` | 个人全局晋升运行态；保留使用，不打包、不提交。 |
+| `.archive/` | 本地历史和可再生文件；不运行、不提交。 |
+| `__pycache__/`、`*.pyc` | 可再生 Python 缓存。 |
 
-## 变更后同步规则
+## 变更后同步
 
-- 只改实现细节：同步对应测试；如果用户可见行为变化，再同步 README、SKILL 和中英文镜像。
-- 改入口、目录、文件职责或架构边界：按需同步 `AGENTS.md`、`PROJECT_RULES.md`、本索引、`PROJECT_MAP` 和相关 reference。
-- 改数据字段或验证规则：同步 schema、数据政策和 `validate` 测试。
-- 不要因为每次小修改而机械更新全部导航文件。
+- 改核心字段或状态：同步 runtime schema、数据政策和核心测试。
+- 改触发层：同步 Hook 文档、触发测试和宿主适配测试。
+- 改入口、目录或职责：按需同步 `AGENTS.md`、`PROJECT_RULES.md`、本索引和项目地图。
+- 不机械修改无关文档。

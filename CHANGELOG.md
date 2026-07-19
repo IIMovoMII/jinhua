@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2.0.0 - 2026-07-19
+
+- Slimmed the runtime Skill control plane from 302 lines / 15,415 bytes to a compact rules-and-routing surface while preserving trigger, threshold, placement, and user-gate semantics.
+- Reduced the trigger layer to local correction/ready attention, direct agent invocation with same-turn guard, and a fixed per-session eight-turn Stop review.
+- Removed output-state tails and the `wake-check`, `hook-user-prompt-submit`, and `parse-output-state` commands.
+- Removed proposal decision/confidence metadata, operator promotion scaffolding and seed data, compaction, fuzzy global merge suggestions, time cooldowns, and force bypasses.
+- Required complete proposals with concrete target, Markdown patch, and risk; `skill_patch` and `project_rule` proposals require concrete owners.
+- Made apply commands ledger-only: agents edit and verify with host-native tools, then record `applied_target` and `edit_summary`.
+- Added idempotent local schema 3.0 and global schema 2.0 migration with malformed-data protection and no signal loss.
+- Added standard-library core-loop tests and synchronized Codex, Claude Code, OpenClaw, Hermes, TRAE, and WorkBuddy packaging.
+
+### Removed public commands
+
+- `wake-check`
+- `hook-user-prompt-submit`
+- `parse-output-state`
+- `compact`
+- `global-merge-suggestions`
+
+### Removed public options
+
+- `--decision`
+- `--confidence`
+- `--force`
+- `--target-skill-path`
+- apply-stage `--patch`
+- `--insert-after`
+- `--cooldown-days`
+- `--cooldown-signals`
+
 ## 2026-07-19 Project Navigation And Archive Boundary
 
 - Added short agent instructions, project rules, and a file-by-file project index so future work can load the relevant active files without scanning runtime data or history.

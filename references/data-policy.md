@@ -1,68 +1,81 @@
 # Data Policy
 
-Record only sanitized methodology signals. This Skill is not user memory, project memory, or chat history.
+Jinhua records sanitized methodology evidence, not user memory, project memory, or chat history.
+
+## Recordability Gate
+
+Record only when the lesson can be expressed as both:
+
+- a reusable `trigger`;
+- a reusable `action`.
+
+At least one must also be true:
+
+- the user corrected workflow, reasoning direction, verification, Skill/tool choice, or a missed procedure;
+- the method repeated in the current project;
+- a repaired failure exposed a transferable cause;
+- a successful path exposed a reusable method;
+- the user explicitly requested crystallization.
+
+If either `trigger` or `action` cannot be written without private task details, skip the signal.
 
 ## May Record
 
-- Sanitized methodology summaries.
-- Abstract method actions.
-- Trigger conditions.
-- Transfer conditions.
-- Negative cases.
-- Verification paths.
-- Operator id.
-- Strength and optional confidence.
-- Proposal gate outcomes.
-- Hashed project identity.
-- Compressed global promotion evidence.
-- Optional explicit project identity before hashing.
+- sanitized summary and context;
+- operator id and local `cluster_key`;
+- source type and strength;
+- trigger, action, transfer conditions, negative cases, verification path, and risk;
+- proposal target, complete Markdown patch, risk, placement, and evidence ids;
+- user gate outcome;
+- actual applied target and verified edit summary;
+- hashed project identity;
+- compressed cross-project evidence.
 
 ## Must Not Record
 
-- User identity details.
-- Contact details, accounts, keys, tokens, or credentials.
-- Complete user original text.
-- Complete conversations.
-- Client names, company secrets, or sensitive project identifiers.
-- Personal preferences.
-- Ordinary bug-fix facts.
-- Raw project paths in global promotion records.
-- Raw explicit project ids in global promotion records.
+- complete user prompts or conversations;
+- names, contact details, accounts, credentials, keys, or tokens;
+- client names, company secrets, or sensitive project identifiers;
+- personal preferences;
+- ordinary one-off bug facts;
+- raw project paths in global promotion data;
+- raw explicit project ids in global promotion data.
 
-## Recording Rule
+If safe sanitization is not possible, do not record.
 
-If safe sanitization is not possible, do not record. If the signal is weak, ignore it instead of writing a weak reject.
+## Local And Global Boundaries
 
-High-quality signals usually contain:
+Project-local `.jinhua/data/` may keep richer signal cards and evidence ids.
 
-- A reusable method.
-- A clear trigger.
-- A plausible transfer condition.
-- A known negative case or risk.
-- A verification path.
+Global `global-data/` may keep only:
 
-## Local vs Global
+- hashed project identity;
+- exact method fingerprint and readable method key;
+- sanitized summary/context;
+- operator, source type, and strength;
+- reusable signal-card fields;
+- evidence ids and aggregate counts.
 
-Project-local `.jinhua/data/` may keep richer signal cards.
+Do not copy raw local evidence into global records. When `--project-id` or `JINHUA_PROJECT_ID` is used, hash the explicit value and store only the hash and identity source.
 
-Global `global-data/` may keep only compressed promotion evidence:
+## Hook Boundary
 
-- method fingerprint
-- method key
-- sanitized summary
-- signal-card fields
-- operator
-- source type
-- strength
-- optional confidence
-- hashed project identity
+Hooks may write only `.jinhua/runtime/invocation-guard.json` for local classification support, unique-turn counting, periodic tickets, and same-turn deduplication.
 
-Do not copy raw local evidence into global state.
+Hooks must not:
 
-When `--project-id` or `JINHUA_PROJECT_ID` is used, hash the explicit value and store only the hash plus identity source.
+- migrate core data;
+- append `signals.jsonl`;
+- create or update proposals;
+- record adoption or rejection;
+- edit a Skill or project rule.
 
-## Write Boundary
+## Retention
 
-Automatic accumulation is not a background task. Writing occurs only when the Skill is invoked and the model calls the CLI.
+Jinhua 2.0 keeps all accepted signals. There is no compaction or ignored-signal status. A weak or unsafe lesson should be skipped before writing rather than written and deleted later.
 
-If files cannot be written, say that persistence failed and provide the record that would have been written.
+## Adoption Boundary
+
+The agent edits and verifies an approved target with host-native tools. `apply-proposal` and `global-apply` only record a completed adoption. If editing or verification fails, no adoption record may be written.
+
+If persistence itself fails, tell the user that the ledger was not updated. Do not claim a signal, proposal, or adoption was saved.

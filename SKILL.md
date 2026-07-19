@@ -5,298 +5,133 @@ description: Gated Skill evolution for reusable workflow lessons. Use when the u
 
 # jinhua
 
-## Mission
+Turn reusable workflow lessons into small improvements that the user explicitly approves.
 
-Turn repeated task experience into small, user-gated Skill improvements.
+## Required Flow
 
-The model handles detection, clustering, abstraction, placement recommendation, proposal drafting, and CLI invocation. The user is only the risk gate. Show the gate in the user's language; for Chinese users, use:
-
-- `项目规则 (project_rule)`: accept as a lightweight current-project rule.
-- `增强已有 Skill (skill_patch)`: accept as an enhancement to a specific existing local Skill.
-- `个人全局 Skill (personal_global_skill)`: accept as a personal global Skill or all-project rule.
-- `拒绝 (No)`: reject it and cool down the cluster.
-- `修订 (Revision)`: record revision feedback, rewrite, and ask the same gate again.
-
-## Trigger Boundary
-
-After this Skill is selected, keep the wake-up boundary tight:
-
-| Case | Action |
-| --- | --- |
-| User correction or feedback changes workflow, verification, reasoning direction, Skill/tool choice, or a missed expected procedure | Run `cycle`; log only if the lesson can be written as reusable `trigger` plus `action`. |
-| Same project repeats one reusable method | Run `cycle`; log only if the method is not local noise. |
-| A fixed failure exposes a transferable cause | Finish the user task first, then consider a quiet `failure_trace`. |
-| User asks to remember, crystallize, make a Skill, or apply everywhere | Run `cycle`; use the placement ladder. |
-| One-off bug, preference, local path, temporary command, or generic memory | Skip jinhua work. |
-
-## Interaction Language
-
-### Localized Display Labels
-
-When jinhua shows user-facing gates, status summaries, or proposal prompts, use the user's current language for display labels while keeping canonical CLI values, JSON keys, command names, file paths, and placement ids unchanged. For Chinese users, prefer labels such as 项目规则(project_rule), 增强已有 Skill(skill_patch), 个人全局 Skill(personal_global_skill), 拒绝(No), 修订(Revision), 信号, 聚类, 就绪, and 待确认门.
-
-Use the user's current conversation language for all user-facing dialogue from this Skill.
-
-Examples:
-
-- If the user is speaking Arabic, explain the proposal, risk, and gate in Arabic.
-- If the user is speaking Chinese, explain the proposal, risk, and Skill-generation prompt in Chinese.
-- If the user switches language, follow the latest clear user language.
-
-Keep durable data and executable identifiers stable:
-
-- CLI commands, option names, JSON fields, ids, file paths, and operator ids stay in English.
-- Project experience records, signal summaries, and generated Skill files may stay in English unless the user asks otherwise.
-- Localize user gate labels for display. Include canonical placement ids such as `project_rule`, `skill_patch`, and `personal_global_skill` in parentheses when needed so the CLI decision is unambiguous.
-
-## Codex Trigger Layer
-
-A Skill cannot run as a true background daemon. Automatic means: when this Skill is selected, run `cycle`; when installed as a Codex plugin, the thin trigger layer may help the host notice likely correction turns before the full Skill is loaded.
-
-The primary trigger path is three gates:
-
-1. `UserPromptSubmit`: local input classification only. It returns `none`, `possible_user_correction`, or `strong_user_correction`; it never logs signals, runs `cycle`, creates proposals, or edits Skills.
-2. Agent direct call: the agent may call jinhua in the current turn when the user explicitly asks to crystallize a method, or when the agent sees a reusable workflow/verification/tool-choice lesson. A lightweight invocation guard prevents duplicate same-turn jinhua calls.
-3. `Stop`: lightweight output-state parsing plus a per-conversation fallback every 8 user turns. When a reusable candidate or periodic check needs model attention, it returns Codex's `decision: block` with one short `reason`; when `stop_hook_active` is true it always passes through. It does not bypass the core jinhua rules or user gate.
-
-`UserPromptSubmit` also performs a read-only ready-attention check. If local or global clusters are already `ready`, or if proposals are already waiting at the user gate, it may inject one short reminder to run `cycle` and then either create one proposal, surface one gate, or state a concrete skip reason. This check reads existing JSON/JSONL only; it must not run `cycle`, write `signals.jsonl`, create proposals, or edit Skills.
-
-Codex plugin hook config lives in `hooks/codex-hooks.json` and calls:
-
-```bash
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py"
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
-```
-
-The wrappers resolve the target project without hard-coding a checkout path: they prefer a project path in the hook payload (including common nested fields), then supported project-directory environment variables, then the hook process working directory. If the only fallback is the plugin directory itself, the hook skips runtime writes instead of placing `.jinhua` inside the installed plugin.
-
-Codex hook stdout must contain only fields supported by the host hook schema. Internal classifier and guard details stay in local runtime state or are omitted from hook output. The legacy `wake-check` and `hook-user-prompt-submit` commands may remain for compatibility, but they are not the primary trigger path.
-
-When this Skill is actually selected, run the deterministic checkpoint:
+When this Skill is selected, run:
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> cycle
 ```
 
-`cycle` does five things:
+Then follow this order:
 
-1. Initializes `.jinhua/data/` if missing.
-2. Summarizes local signals, clusters, and pending gates.
-3. Imports active local signals into the installed Skill's `global-data/`.
-4. Summarizes cross-project method clusters and pending global gates.
-5. Prints proposal skeleton hints for ready clusters, including `placement_hint` and any concrete local Skill recommendation.
+1. Surface an existing pending user gate before starting new jinhua work.
+2. If `cycle` reports a ready cluster, create one complete proposal or state a concrete skip reason.
+3. Log a new signal only after the write-or-skip gate below passes.
+4. Run `cycle` after every ledger-changing command.
 
-Run `cycle` at the start of a triggered invocation, after any ledger-changing command, and before finishing substantial work that contained a clear methodology signal.
+Hooks only route attention, count turns, and prevent duplicate same-turn calls. They never log signals, create proposals, migrate core data, or edit files. Read [references/hook-integration.md](references/hook-integration.md) only for Hook or host-adapter work.
 
-If `cycle` reports pending local or global proposals, surface one user gate immediately before creating new proposals or continuing the jinhua branch. Hook runners may use `cycle --json --fail-on-pending-gate`; exit code `2` means a pending gate must be shown to the user.
+## Write-Or-Skip Gate
 
-## Runtime Data
+Write only when the lesson can be expressed as both:
 
-Project-local runtime:
+- `trigger`: the future condition where the method applies.
+- `action`: the reusable action to take.
 
-- `.jinhua/data/signals.jsonl`
-- `.jinhua/data/cluster-state.json`
-- `.jinhua/data/proposals.jsonl`
-- `.jinhua/data/adopted-edits.jsonl`
-- `.jinhua/data/rejected-proposals.jsonl`
-- `.jinhua/data/crystallized-operators.jsonl`
-- `.jinhua/data/evolution-state.json`
+At least one must also be true:
 
-Cross-project runtime:
+- The user corrected workflow, reasoning direction, verification, Skill/tool choice, or a missed procedure.
+- The same reusable method repeated in the current project.
+- A repaired failure exposed a transferable cause.
+- A successful path exposed a reusable method.
+- The user explicitly asked to preserve, crystallize, write, or apply the method elsewhere.
 
-- `<jinhua-dir>/global-data/global-signals.jsonl`
-- `<jinhua-dir>/global-data/global-clusters.json`
-- `<jinhua-dir>/global-data/global-proposals.jsonl`
-- `<jinhua-dir>/global-data/adopted-global-edits.jsonl`
-- `<jinhua-dir>/global-data/rejected-global-proposals.jsonl`
-- `<jinhua-dir>/global-data/project-index.json`
-- `<jinhua-dir>/global-data/global-state.json`
+Finish the user task before logging a repaired failure unless the user explicitly asks to crystallize it now.
 
-Keep raw evidence project-local. Promote only compressed methodology evidence and hashed project identity.
+Skip one-off bugs, output preferences, private facts, local paths, temporary commands, local API details, and lessons useful only in the current conversation.
 
-If one workspace contains unrelated projects or conversations, use `--project-id <stable-key>` or `JINHUA_PROJECT_ID` so global promotion can distinguish them without storing the raw key.
+## Signal And Readiness
 
-## Signal Recording
-
-Log only clear reusable methodology signals. Weak signals should usually be ignored.
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> log-signal \
-  --source-type user_correction \
-  --summary "Read README and relevant source before recommending reusable GitHub projects" \
-  --operator verification_path \
-  --cluster-key verification_path:read_readme_and_source_before_recommending_projects \
-  --context "researching reusable tools" \
-  --strength 2 \
-  --trigger "recommending external projects for adoption" \
-  --action "verify README and relevant source before recommending" \
-  --transfer-conditions "tool, library, Skill, or agent project recommendations" \
-  --negative-cases "quick pointers where the user did not ask for adoption judgment" \
-  --verification-path "cite README and source files used" \
-  --confidence 0.8 \
-  --auto-init
-```
-
-Required key:
-
-```text
-operator:short_method_slug
-```
-
-Strength:
+Strength is fixed:
 
 - `1`: ordinary self-observation.
 - `2`: clear user correction or repeated pattern.
 - `3`: high-cost failure, repeated rework, or explicit crystallization request.
 
-Optional signal-card fields make cross-project merging more accurate:
+Use `log-signal --immediate` only for an explicit crystallization request or an urgent reusable high-cost failure.
 
-- `trigger`: when the method applies.
-- `action`: the reusable method action.
-- `transfer_conditions`: where it transfers.
-- `negative_cases`: when not to use it.
-- `verification_path`: how to check it.
-- `confidence`: optional 0..1 ranking signal, never a final authority.
+A local cluster becomes ready at 3 signals or total strength 5. Same-project readiness is enough for a local proposal; do not wait for cross-project evidence.
 
-After `log-signal`, run `cycle`.
+The model chooses the reusable abstraction, operator, `cluster_key`, strength, and placement. The CLI only validates, stores, counts, clusters, migrates, and records gate outcomes. Read [references/data-policy.md](references/data-policy.md) before changing recordability or privacy rules.
 
-Quiet `failure_trace` signals are for repaired failures whose cause is clearly transferable.
+## Placement
 
-## Write-or-Skip Gate
+Choose the smallest useful landing point by strong evidence first:
 
-Do not force every lesson into a proposal. Most task details should be skipped.
+1. `personal_global_skill`: explicit all-project behavior, a new standalone Skill, an independent workflow with no existing owner, or mature global evidence.
+2. `skill_patch`: the method clearly belongs to an existing Skill. Recommend the concrete Skill and path; never make the user search for it.
+3. `project_rule`: current-project need without a clear Skill owner or global scope.
 
-Log only if the lesson can become a reusable `trigger` plus `action` and at least one is true:
+Normal distribution should be: skip most, `project_rule` often, `skill_patch` less often, `personal_global_skill` least often.
 
-- The user corrected reasoning direction, verification standard, or workflow.
-- The same method appears repeatedly in the current project.
-- A clear failure was fixed and the cause is transferable.
-- A success path reveals a reusable method.
-- The user explicitly asks to remember, crystallize, write into a Skill, or apply everywhere.
+For `project_rule`, use the CLI recommendation for the current agent profile. Do not create a missing project rule file before user confirmation.
 
-Skip one-off preferences, ordinary code bugs, local paths, temporary commands, local API details, and lessons useful only in the current chat.
+## Proposal And User Gate
 
-## Local Proposal Gate
+Create proposals only from ready clusters. Every proposal must contain:
 
-Same-project repetition means current need; do not wait for cross-project evidence before proposing a local settling point.
+- concrete `target`;
+- complete Markdown `patch` with a heading;
+- concrete `risk`;
+- representative evidence;
+- placement and placement reason;
+- concrete Skill/path for `skill_patch` or rule-file recommendation for `project_rule`.
 
-Generate a proposal when one local cluster reaches any trigger:
+Show the gate in the user's current language. For Chinese users:
 
-- At least 3 active signals.
-- Total strength at least 5.
-- The user explicitly asks to remember, crystallize, write into a Skill, or evolve now.
-- A high-cost failure is reusable and urgent.
-
-If `cycle` prints ready clusters, do not merely explain readiness. Either create the proposal immediately, or state the concrete skip reason.
-
-Use the `cycle` skeleton as a starting point, refine placement, target, patch, and risk, then run:
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> propose \
-  --cluster-key <cluster-key> \
-  --decision proposed_edit \
-  --placement <project_rule|skill_patch|personal_global_skill> \
-  --target "<target Skill / file / insertion location>" \
-  --patch "## <Short Rule Title>
-
-<Complete Markdown rule block.>" \
-  --risk "<main side effect>"
+```text
+项目规则(project_rule)
+增强已有 Skill(skill_patch)
+个人全局 Skill(personal_global_skill)
+拒绝(No)
+修订(Revision)
 ```
 
-Placement ladder:
+Choosing a placement accepts that placement. `Revision` records feedback, rewrites the proposal, and asks the same gate again. `No` puts the cluster into cooldown until 5 new same-cluster signals arrive.
 
-1. `personal_global_skill`: use only when the user asks for all-project behavior, asks for a new standalone Skill, the method is an independent workflow with no existing Skill owner, or global evidence supports it.
-2. `skill_patch`: use when the method belongs in an existing local Skill. The agent must recommend the most suitable concrete local Skill and path; do not ask the user to find it.
-3. `project_rule`: use as the local fallback when current-project repetition shows need but the method is not clearly an existing Skill patch or personal global Skill.
+If the user selects a different placement, revise the proposal first so its owner, target, patch, and risk match that placement.
 
-Do not choose `personal_global_skill` for current-project conventions, local repair habits, directory structure, framework details, or one-off tool preferences. Normal distribution should be: skip most, `project_rule` often, `skill_patch` less often, `personal_global_skill` least often.
+After acceptance:
 
-For `project_rule`, use the CLI skeleton's `recommended_project_rule_file` and `recommended_project_rule_reason`. It prefers existing project files and supports `--agent-profile` / `JINHUA_AGENT_PROFILE` for `codex`, `claude`, `copilot`, `trae`, `hermes`, `openclaw`, `workbuddy`, and generic/custom fallback. Never auto-create a project rule file without user confirmation.
+1. Edit the approved target with the host's native file tools.
+2. Verify the actual change.
+3. Only then run `apply-proposal` or `global-apply` with the chosen placement, actual applied target, and edit summary.
 
-Show the user this structure, rendered in the user's current conversation language:
-
-```markdown
-## Skill Evolution Proposal
-
-Trigger:
-[why the threshold was reached]
-
-Decision:
-proposed_edit / crystallize_experience / merge_rule / experimental_operator / core_operator_promotion / reject
-
-Recommended placement:
-project_rule / skill_patch / personal_global_skill
-
-Placement reason:
-[why this layer is the smallest useful landing point]
-
-Evidence:
-[up to 3 representative signal summaries]
-
-Recommended local Skill:
-[specific local Skill name, required when placement is skill_patch]
-
-Recommended Skill path:
-[local SKILL.md path, required when placement is skill_patch]
-
-Recommended project rule file:
-[project rule file, required when placement is project_rule]
-
-Project rule reason:
-[why this file was recommended]
-
-Target:
-[target Skill / file / insertion location]
-
-Patch:
-[complete Markdown block, not a loose sentence]
-
-Risk:
-[main side effect]
-
-User gate:
-Choose: 项目规则(project_rule) / 增强已有 Skill(skill_patch) / 个人全局 Skill(personal_global_skill) / 拒绝(No) / 修订(Revision)
-Choosing a placement means accepting that placement.
-```
-
-Keep `decision` values, proposal ids, command names, option names, file paths, and code snippets in English even when the surrounding explanation is localized.
+The apply commands only record adoption. They do not edit files. Never record adoption after an edit or verification failure.
 
 ## Global Promotion
 
-Cross-project repetition is real only when:
+`cycle` imports compressed active local signals into global runtime with hashed project identity. Raw evidence stays project-local.
 
-- The normalized method fingerprint matches, preferably from `operator + action`.
-- `trigger` and `transfer_conditions` are evidence for transfer judgment, not hard split keys.
-- Evidence comes from multiple unique project hashes.
-- The method passes model judgment for abstraction, transferability, risk, and duplication.
-- A global proposal is shown to the user before any global Skill edit is adopted.
+Global grouping uses a stable method fingerprint, preferably normalized `operator + action`. The model still judges abstraction, transferability, risk, and duplication.
 
-Default global readiness:
+Global readiness is:
 
-- 3 unique projects, 5 evidence records, and strength 7.
-- Or fast path: 2 unique projects, strength 6, and repeated high-strength or user-correction evidence.
+- 3 unique projects, 5 evidence records, and total strength 7; or
+- fast path: 2 unique projects, total strength 6, plus at least 2 high-strength or user-correction records.
 
-Use `global-merge-suggestions` to inspect similar global clusters. It never mutates data.
+Global proposals use only `skill_patch` or `personal_global_skill` and always pass through the user gate.
 
-## Applying Decisions
+## Language And References
 
-For local proposals:
+Use the user's latest clear language for dialogue, proposal explanations, risks, status summaries, and gate labels. Keep commands, option names, JSON fields, ids, paths, operator ids, and placement ids in English.
 
-- `项目规则(project_rule)`, `增强已有 Skill(skill_patch)`, or `个人全局 Skill(personal_global_skill)`: run `apply-proposal --placement <chosen-placement>`, then `cycle`.
-- `拒绝(No)`: run `reject-proposal`, then `cycle`.
-- `修订(Revision)`: run `reject-proposal --revision`, rewrite, and ask again.
+Read references only when needed:
 
-For global proposals:
+- CLI syntax and state transitions: [references/cli-usage.md](references/cli-usage.md)
+- Recordability, privacy, and project identity: [references/data-policy.md](references/data-policy.md)
+- Runtime file schemas and migration: [references/runtime-schema.md](references/runtime-schema.md)
+- Hook and host behavior: [references/hook-integration.md](references/hook-integration.md)
+- Maintenance and packaging: [references/maintenance.md](references/maintenance.md)
 
-- `增强已有 Skill(skill_patch)` or `个人全局 Skill(personal_global_skill)`: run `global-apply --placement <chosen-placement>`, then `cycle`.
-- `拒绝(No)`: run `global-reject`, then `cycle`.
-- `修订(Revision)`: run `global-reject --revision`, rewrite, and ask again.
+## Hard Boundaries
 
-Rejected clusters enter cooldown. Do not bother the user again unless stronger evidence appears.
-
-## Boundaries
-
-The CLI performs deterministic ledger work: init, signal append, clustering, global import, proposal records, gate outcomes, merge suggestions, compaction, and validation.
-
-The CLI does not decide whether a method is transferable or worth writing. The model makes that judgment and the user gates risk.
+- Do not create a second experience ledger.
+- Do not auto-log from Hooks.
+- Do not bypass readiness except through `log-signal --immediate`.
+- Do not bypass the placement-aware user gate.
+- Do not auto-edit a Skill or rule from the CLI.
+- Do not store raw user messages, credentials, private paths, or sensitive project identifiers in global data.

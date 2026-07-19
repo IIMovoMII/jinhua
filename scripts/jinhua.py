@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import uuid
@@ -33,7 +32,6 @@ JSONL_FILES = [
     "proposals.jsonl",
     "adopted-edits.jsonl",
     "rejected-proposals.jsonl",
-    "crystallized-operators.jsonl",
 ]
 
 JSON_FILES = ["cluster-state.json", "evolution-state.json"]
@@ -80,22 +78,15 @@ SOURCE_TYPES = [
     "self_observation",
 ]
 
-SIGNAL_STATUSES = {"active", "compacted", "ignored"}
+SIGNAL_STATUSES = {"active"}
 CLUSTER_STATUSES = {"active", "ready", "proposed", "adopted", "cooldown"}
 PROPOSAL_STATUSES = {"pending_user_gate", "applied", "rejected", "needs_revision"}
-PROPOSAL_DECISIONS = {
-    "proposed_edit",
-    "crystallize_experience",
-    "merge_rule",
-    "experimental_operator",
-    "core_operator_promotion",
-    "reject",
-}
 PROPOSAL_PLACEMENTS = {
     "project_rule",
     "skill_patch",
     "personal_global_skill",
 }
+GLOBAL_PROPOSAL_PLACEMENTS = {"skill_patch", "personal_global_skill"}
 PLACEMENT_USER_GATE = (
     "项目规则(project_rule) / 增强已有 Skill(skill_patch) / "
     "个人全局 Skill(personal_global_skill) / 拒绝(No) / 修订(Revision)"
@@ -104,20 +95,8 @@ GLOBAL_USER_GATE = (
     "增强已有 Skill(skill_patch) / 个人全局 Skill(personal_global_skill) / "
     "拒绝(No) / 修订(Revision)"
 )
-OPERATOR_TIERS = {"core", "experimental", "deprecated", "none"}
-SCORE_KEYS = [
-    "problem_representation",
-    "knowledge_access",
-    "search_path",
-    "constraint_recognition",
-    "candidate_comparison",
-    "failure_prediction",
-    "compression",
-]
-
 SIGNAL_COUNT_THRESHOLD = 3
 SIGNAL_STRENGTH_THRESHOLD = 5
-COOLDOWN_DAYS = 7
 COOLDOWN_SIGNAL_LIMIT = 5
 GLOBAL_PROJECT_THRESHOLD = 3
 GLOBAL_EVIDENCE_THRESHOLD = 5
@@ -178,14 +157,6 @@ STATUS_LABELS = {
     "ready_state": "就绪",
 }
 
-OUTPUT_STATES = {
-    "ok",
-    "user_correction_handled",
-    "self_issue_detected",
-    "uncertain",
-    "jinhua_candidate",
-}
-OUTPUT_VISIBILITIES = {"silent", "notify", "ask_confirmation"}
 DEFAULT_PERIODIC_STOP_INTERVAL = 8
 
 CORRECTION_RULES = [
@@ -283,8 +254,6 @@ CORRECTION_RULES = [
     ]),
 ]
 
-STRONG_CORRECTION_PATTERNS = [pattern for _, weight, patterns in CORRECTION_RULES if weight >= 3 for pattern in patterns]
-
 MEDIUM_CORRECTION_PATTERNS = [
     r"不是",
     r"不对|不對",
@@ -323,28 +292,6 @@ WEAK_CLARIFICATION_PATTERNS = [
     r"\bcontinue\b",
     r"\bgive examples?\b",
     r"\bshorter\b",
-]
-
-WAKE_POSITIVE_PATTERNS = [
-    r"\bjinhua(?:\.skill)?\b",
-    r"\b(skill|tool|procedure|workflow|verification|reasoning|methodology)\b.*\b(trigger|wake|activate|route|call|load|select|missed|should have)\b",
-    r"\b(trigger|wake|activate|route|call|load|select|missed|should have)\b.*\b(skill|tool|procedure|workflow|verification|reasoning|methodology)\b",
-    r"\b(remember|crystallize|preserve|generalize|write|save)\b.*\b(skill|rule|practice|method|workflow|procedure|agents\.md|claude\.md)\b",
-    r"\b(next time|future|from now on|going forward)\b.*\b(should|must|always|never|verify|check|use|run|call)\b",
-    r"\bshould have\b.*\b(verified|checked|used|called|run|triggered|loaded|selected)\b",
-    r"\b(verify|check|use|call|run|trigger|load|select)\b.*\bbefore\b.*\b(answering|finishing|claiming|recommending)\b",
-    r"为什么.*(没|沒有|没有|未).*(触发|调用|唤醒|啟動|启动|執行|执行)",
-    r"(应该|應該|本该|本應|需要).*(触发|调用|唤醒|啟動|启动|執行|执行).*(skill|工具|流程|jinhua)",
-    r"(以后|下次|今后|往后).*(应该|應該|必须|一定|先|记住|沉淀|写进)",
-    r"(工作流|流程|验证|驗證|推理|工具|skill|技能|规则|規則).*(不对|不對|错了|錯了|漏了|没做|沒做|应该|應該)",
-    r"(应该|應該|必须|一定|先).*(验证|驗證|检查|檢查|确认|確認).*(再|后|後).*(回答|完成|判断|判斷|推荐|推薦)",
-]
-
-WAKE_NEGATIVE_PATTERNS = [
-    r"^\s*(no|不是|不对|不對|错了|錯了)[，,:\s]+.{0,80}$",
-    r"\b(page|slide|line|row|column|cell|chapter|section)\s+\d+",
-    r"\btypo\b|\bspelling\b|\bgrammar\b",
-    r"(页|頁|行|列|段|章|节|節|幻灯片|投影片)\s*\d+",
 ]
 
 GENERIC_PROJECT_RULE_FILES = [
@@ -433,44 +380,6 @@ def path_is_relative_to(path: Path, root: Path) -> bool:
         return True
     except ValueError:
         return False
-
-
-def apply_text_patch(target: Path, patch: str, insert_after: str = "") -> str:
-    text = target.read_text(encoding="utf-8")
-    block = patch.strip()
-    if block in text:
-        return "already_present"
-
-    if insert_after:
-        marker = insert_after.strip()
-        index = text.find(marker)
-        if index == -1:
-            raise SystemExit(f"Insert marker not found: {marker!r}")
-        insert_at = index + len(marker)
-        text = text[:insert_at].rstrip() + "\n\n" + block + "\n\n" + text[insert_at:].lstrip()
-    else:
-        text = text.rstrip() + "\n\n" + block + "\n"
-
-    with target.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write(text)
-    return "written"
-
-
-def validate_skill_write_target(args: argparse.Namespace, target: Path) -> None:
-    allowed_roots = [
-        project_root(args),
-        codex_home() / "skills",
-        skill_root(),
-    ]
-    if not any(path_is_relative_to(target, root.resolve()) for root in allowed_roots):
-        raise SystemExit("Target must be under project root, CODEX_HOME/skills, or this Skill root.")
-
-    lower_parts = {part.lower() for part in target.parts}
-    if target.name == "SKILL.md":
-        return
-    if "references" in lower_parts and target.suffix.lower() == ".md":
-        return
-    raise SystemExit("apply may only write SKILL.md or references/*.md")
 
 
 def normalize_agent_profile(value: str) -> str:
@@ -571,7 +480,7 @@ def project_index_path(args: argparse.Namespace | None = None) -> Path:
 
 def default_state() -> dict:
     return {
-        "schema_version": "2.0",
+        "schema_version": "3.0",
         "last_proposal_id": "",
         "total_signal_count": 0,
         "adopted_edit_count": 0,
@@ -581,12 +490,12 @@ def default_state() -> dict:
 
 
 def default_cluster_state() -> dict:
-    return {"schema_version": "2.0", "clusters": {}, "updated_at": ""}
+    return {"schema_version": "3.0", "clusters": {}, "updated_at": ""}
 
 
 def default_global_state() -> dict:
     return {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "last_scan_at": "",
         "last_scan_project_count": 0,
         "last_scan_signal_count": 0,
@@ -597,11 +506,11 @@ def default_global_state() -> dict:
 
 
 def default_global_cluster_state() -> dict:
-    return {"schema_version": "1.0", "clusters": {}, "updated_at": ""}
+    return {"schema_version": "2.0", "clusters": {}, "updated_at": ""}
 
 
 def default_project_index() -> dict:
-    return {"schema_version": "1.0", "projects": {}, "updated_at": ""}
+    return {"schema_version": "2.0", "projects": {}, "updated_at": ""}
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -620,13 +529,23 @@ def read_jsonl(path: Path) -> list[dict]:
     return records
 
 
-def write_jsonl(path: Path, records: list[dict]) -> None:
+def atomic_write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(text, encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def write_jsonl(path: Path, records: list[dict]) -> None:
     if records:
         text = "\n".join(json.dumps(r, ensure_ascii=False, separators=(",", ":")) for r in records) + "\n"
     else:
         text = ""
-    path.write_text(text, encoding="utf-8")
+    atomic_write_text(path, text)
 
 
 def append_jsonl(path: Path, record: dict) -> None:
@@ -642,8 +561,7 @@ def read_json(path: Path, default: dict) -> dict:
 
 
 def write_json(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    atomic_write_text(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
 
 
 def regex_hits(patterns: list[str], text: str) -> list[str]:
@@ -670,8 +588,6 @@ def correction_evidence(text: str) -> list[dict]:
 def read_state(args: argparse.Namespace) -> dict:
     state = default_state()
     state.update(read_json(state_path(args), default_state()))
-    if state.get("schema_version") == "1.1":
-        state["schema_version"] = "2.0"
     return state
 
 
@@ -680,7 +596,7 @@ def write_state(args: argparse.Namespace, state: dict) -> None:
     for key in clean_state:
         if key in state:
             clean_state[key] = state[key]
-    clean_state["schema_version"] = "2.0"
+    clean_state["schema_version"] = "3.0"
     clean_state["updated_at"] = utc_now()
     write_json(state_path(args), clean_state)
 
@@ -693,7 +609,7 @@ def read_cluster_state(args: argparse.Namespace) -> dict:
 
 
 def write_cluster_state(args: argparse.Namespace, state: dict) -> None:
-    state["schema_version"] = "2.0"
+    state["schema_version"] = "3.0"
     state["updated_at"] = utc_now()
     write_json(cluster_path(args), state)
 
@@ -705,7 +621,7 @@ def read_global_state(args: argparse.Namespace | None = None) -> dict:
 
 
 def write_global_state(state: dict, args: argparse.Namespace | None = None) -> None:
-    state["schema_version"] = "1.0"
+    state["schema_version"] = "2.0"
     state["updated_at"] = utc_now()
     write_json(global_state_path(args), state)
 
@@ -718,7 +634,7 @@ def read_global_clusters(args: argparse.Namespace | None = None) -> dict:
 
 
 def write_global_clusters(state: dict, args: argparse.Namespace | None = None) -> None:
-    state["schema_version"] = "1.0"
+    state["schema_version"] = "2.0"
     state["updated_at"] = utc_now()
     write_json(global_cluster_path(args), state)
 
@@ -731,7 +647,7 @@ def read_project_index(args: argparse.Namespace | None = None) -> dict:
 
 
 def write_project_index(state: dict, args: argparse.Namespace | None = None) -> None:
-    state["schema_version"] = "1.0"
+    state["schema_version"] = "2.0"
     state["updated_at"] = utc_now()
     write_json(project_index_path(args), state)
 
@@ -740,12 +656,185 @@ def runtime_exists(args: argparse.Namespace) -> bool:
     return data_dir(args).exists() and state_path(args).exists()
 
 
+def migrated_proposal_placement(record: dict, global_scope: bool = False) -> str:
+    placement = str(record.get("placement") or "").strip()
+    allowed = GLOBAL_PROPOSAL_PLACEMENTS if global_scope else PROPOSAL_PLACEMENTS
+    if placement in allowed:
+        return placement
+    target_text = " ".join(
+        str(record.get(field) or "")
+        for field in ["target", "recommended_skill", "recommended_skill_path"]
+    ).lower()
+    if "skill.md" in target_text or record.get("recommended_skill_path"):
+        return "skill_patch"
+    return "personal_global_skill" if global_scope else "project_rule"
+
+
+def migrated_adopted_record(record: dict, proposals_by_id: dict[str, dict], global_scope: bool = False) -> dict:
+    migrated = dict(record)
+    proposal = proposals_by_id.get(str(record.get("proposal_id", "")), {})
+    applied_target = (
+        record.get("applied_target")
+        or record.get("applied_path")
+        or record.get("target_skill")
+        or proposal.get("target")
+        or ""
+    )
+    migrated["applied_target"] = applied_target
+    migrated["placement"] = migrated_proposal_placement(
+        {**proposal, **migrated, "target": applied_target or proposal.get("target", "")},
+        global_scope=global_scope,
+    )
+    migrated["edit_summary"] = str(record.get("edit_summary") or proposal.get("patch") or "Migrated adopted edit")[:220]
+    for field in ["target_skill", "applied_path", "write_status", "decision"]:
+        migrated.pop(field, None)
+    return migrated
+
+
+def migrate_local_runtime(args: argparse.Namespace) -> bool:
+    if not runtime_exists(args):
+        return False
+    data = data_dir(args)
+    raw_state = read_json(state_path(args), default_state())
+    crystallized_path = data / "crystallized-operators.jsonl"
+    if raw_state.get("schema_version") == "3.0" and not crystallized_path.exists():
+        return False
+
+    signals = read_jsonl(data / "signals.jsonl")
+    proposals = read_jsonl(data / "proposals.jsonl")
+    adopted = read_jsonl(data / "adopted-edits.jsonl")
+    rejected = read_jsonl(data / "rejected-proposals.jsonl")
+    if crystallized_path.exists():
+        read_jsonl(crystallized_path)
+    cluster_state = read_json(cluster_path(args), default_cluster_state())
+
+    migrated_signals = []
+    for record in signals:
+        item = dict(record)
+        item.pop("confidence", None)
+        if item.get("status") in {"compacted", "ignored"}:
+            item["status"] = "active"
+        migrated_signals.append(item)
+
+    migrated_proposals = []
+    for record in proposals:
+        item = dict(record)
+        for field in ["decision", "applied_path", "write_status"]:
+            item.pop(field, None)
+        item["placement"] = migrated_proposal_placement(item)
+        migrated_proposals.append(item)
+
+    proposals_by_id = {str(item.get("id", "")): item for item in migrated_proposals}
+    migrated_adopted = [migrated_adopted_record(item, proposals_by_id) for item in adopted]
+    migrated_rejected = []
+    for record in rejected:
+        item = dict(record)
+        item.pop("cooldown_until", None)
+        if int(item.get("cooldown_signal_remaining", 0) or 0) <= 0:
+            item["cooldown_signal_remaining"] = COOLDOWN_SIGNAL_LIMIT
+        migrated_rejected.append(item)
+
+    clusters = cluster_state.setdefault("clusters", {})
+    for cluster in clusters.values():
+        cluster.pop("cooldown_until", None)
+        if cluster.get("status") == "cooldown" and int(cluster.get("cooldown_signal_remaining", 0) or 0) <= 0:
+            cluster["cooldown_signal_remaining"] = COOLDOWN_SIGNAL_LIMIT
+    cluster_state["schema_version"] = "3.0"
+    cluster_state["updated_at"] = utc_now()
+
+    clean_state = default_state()
+    for key in clean_state:
+        if key in raw_state:
+            clean_state[key] = raw_state[key]
+    clean_state["schema_version"] = "3.0"
+    clean_state["updated_at"] = utc_now()
+
+    write_jsonl(data / "signals.jsonl", migrated_signals)
+    write_jsonl(data / "proposals.jsonl", migrated_proposals)
+    write_jsonl(data / "adopted-edits.jsonl", migrated_adopted)
+    write_jsonl(data / "rejected-proposals.jsonl", migrated_rejected)
+    write_json(cluster_path(args), cluster_state)
+    write_json(state_path(args), clean_state)
+    if crystallized_path.exists():
+        crystallized_path.unlink()
+    return True
+
+
+def migrate_global_runtime(args: argparse.Namespace | None = None) -> bool:
+    if not global_runtime_exists(args):
+        return False
+    data = global_data_dir(args)
+    raw_state = read_json(global_state_path(args), default_global_state())
+    if raw_state.get("schema_version") == "2.0":
+        return False
+
+    signals = read_jsonl(global_signal_path(args))
+    proposals = read_jsonl(global_proposal_path(args))
+    adopted = read_jsonl(adopted_global_path(args))
+    rejected = read_jsonl(rejected_global_path(args))
+    cluster_state = read_json(global_cluster_path(args), default_global_cluster_state())
+    project_index = read_json(project_index_path(args), default_project_index())
+
+    migrated_signals = []
+    for record in signals:
+        item = dict(record)
+        item.pop("confidence", None)
+        if item.get("status") in {"compacted", "ignored"}:
+            item["status"] = "active"
+        migrated_signals.append(item)
+
+    migrated_proposals = []
+    for record in proposals:
+        item = dict(record)
+        for field in ["decision", "applied_path", "write_status"]:
+            item.pop(field, None)
+        item["placement"] = migrated_proposal_placement(item, global_scope=True)
+        migrated_proposals.append(item)
+
+    proposals_by_id = {str(item.get("id", "")): item for item in migrated_proposals}
+    migrated_adopted = [migrated_adopted_record(item, proposals_by_id, global_scope=True) for item in adopted]
+    migrated_rejected = []
+    for record in rejected:
+        item = dict(record)
+        item.pop("cooldown_until", None)
+        if int(item.get("cooldown_signal_remaining", 0) or 0) <= 0:
+            item["cooldown_signal_remaining"] = COOLDOWN_SIGNAL_LIMIT
+        migrated_rejected.append(item)
+
+    clusters = cluster_state.setdefault("clusters", {})
+    for cluster in clusters.values():
+        cluster.pop("cooldown_until", None)
+        if cluster.get("status") == "cooldown" and int(cluster.get("cooldown_signal_remaining", 0) or 0) <= 0:
+            cluster["cooldown_signal_remaining"] = COOLDOWN_SIGNAL_LIMIT
+    cluster_state["schema_version"] = "2.0"
+    cluster_state["updated_at"] = utc_now()
+    project_index["schema_version"] = "2.0"
+    project_index["updated_at"] = utc_now()
+
+    clean_state = default_global_state()
+    for key in clean_state:
+        if key in raw_state:
+            clean_state[key] = raw_state[key]
+    clean_state["schema_version"] = "2.0"
+    clean_state["updated_at"] = utc_now()
+
+    write_jsonl(global_signal_path(args), migrated_signals)
+    write_jsonl(global_proposal_path(args), migrated_proposals)
+    write_jsonl(adopted_global_path(args), migrated_adopted)
+    write_jsonl(rejected_global_path(args), migrated_rejected)
+    write_json(global_cluster_path(args), cluster_state)
+    write_json(project_index_path(args), project_index)
+    write_json(global_state_path(args), clean_state)
+    return True
+
+
 def ensure_runtime(args: argparse.Namespace, auto_init: bool = False) -> None:
     if not runtime_exists(args):
         if auto_init:
             initialize_runtime(args, quiet=True)
             return
         raise SystemExit("Runtime directory not initialized. Run: jinhua.py init")
+    migrate_local_runtime(args)
 
 
 def global_runtime_exists(args: argparse.Namespace | None = None) -> bool:
@@ -769,6 +858,7 @@ def ensure_global_runtime(args: argparse.Namespace | None = None) -> None:
             write_json(path, default_project_index())
         else:
             write_json(path, default_global_state())
+    migrate_global_runtime(args)
 
 
 def is_skill_source_project(args: argparse.Namespace) -> bool:
@@ -800,18 +890,7 @@ def clamp_strength(value: int) -> int:
     return value
 
 
-def clamp_confidence(value: float | None) -> float | None:
-    if value is None:
-        return None
-    if value < 0 or value > 1:
-        raise SystemExit("--confidence must be between 0 and 1")
-    return round(float(value), 3)
-
-
 def cooldown_is_active(cluster: dict) -> bool:
-    until = parse_utc(cluster.get("cooldown_until", ""))
-    if until and until > datetime.now(timezone.utc):
-        return True
     remaining = int(cluster.get("cooldown_signal_remaining", 0) or 0)
     return remaining > 0
 
@@ -1153,6 +1232,20 @@ def normalize_placement(value: str, default: str = "") -> str:
     return placement
 
 
+def require_concrete_text(value: str, option_name: str) -> str:
+    text = str(value or "").strip()
+    if not text or text.startswith("["):
+        raise SystemExit(f"{option_name} must contain concrete content, not a placeholder.")
+    return text
+
+
+def require_markdown_patch(value: str) -> str:
+    patch = require_concrete_text(value, "--patch")
+    if not re.search(r"(?m)^#{1,6}\s+\S", patch):
+        raise SystemExit("--patch must be a complete Markdown block with a heading.")
+    return patch
+
+
 def infer_local_placement(args: argparse.Namespace | None, cluster: dict, records: list[dict]) -> dict:
     recommendation = recommend_local_skill(args, cluster, records)
     text = placement_text(cluster, records)
@@ -1333,22 +1426,6 @@ def global_proposal_skeleton(cluster: dict, records: list[dict], args: argparse.
     }
 
 
-def cluster_tokens(cluster: dict) -> set[str]:
-    parts = [cluster.get("method_key", "")]
-    parts.extend(cluster.get("summary_samples", []))
-    parts.extend(cluster.get("method_signature_samples", []))
-    tokens: set[str] = set()
-    for part in parts:
-        tokens.update(method_words(part))
-    return tokens
-
-
-def jaccard(left: set[str], right: set[str]) -> float:
-    if not left or not right:
-        return 0.0
-    return len(left & right) / len(left | right)
-
-
 def global_threshold_reason(cluster: dict) -> str:
     project_count = len(set(cluster.get("project_hashes", [])))
     evidence_count = int(cluster.get("evidence_count", 0))
@@ -1391,7 +1468,6 @@ def update_cluster_for_signal(args: argparse.Namespace, signal: dict) -> dict:
         "last_seen": "",
         "status": "active",
         "ready_reason": "",
-        "cooldown_until": "",
         "cooldown_signal_remaining": 0,
     })
 
@@ -1484,8 +1560,6 @@ def global_record_from_signal(args: argparse.Namespace, signal: dict) -> dict:
         value = compact_text(signal.get(field, ""), limit=160)
         if value:
             record[field] = value
-    if signal.get("confidence") is not None:
-        record["confidence"] = signal.get("confidence")
     return record
 
 
@@ -1507,7 +1581,6 @@ def merge_global_record_into_clusters(clusters: dict, record: dict) -> None:
         "last_seen": "",
         "status": "active",
         "ready_reason": "",
-        "cooldown_until": "",
         "cooldown_signal_remaining": 0,
     })
 
@@ -1667,7 +1740,6 @@ def collect_global_summary(args: argparse.Namespace, import_result: dict | None 
             pending_proposals.append({
                 "proposal_id": proposal.get("id", ""),
                 "method_fingerprint": proposal.get("method_fingerprint", ""),
-                "decision": proposal.get("decision", ""),
                 "placement": proposal.get("placement", ""),
                 "recommended_skill": proposal.get("recommended_skill", ""),
                 "status": proposal.get("status", ""),
@@ -1727,7 +1799,7 @@ def command_global_cycle(args: argparse.Namespace) -> None:
         for proposal in summary["pending_proposals"]:
             print(
                 f"- {proposal['proposal_id']}  status={proposal['status']}  "
-                f"decision={proposal['decision']}  placement={proposal.get('placement', '')}  "
+                f"placement={proposal.get('placement', '')}  "
                 f"method={proposal['method_fingerprint']}"
             )
             if proposal.get("recommended_skill"):
@@ -1769,81 +1841,6 @@ def command_global_status(args: argparse.Namespace) -> None:
     print(f"  {STATUS_LABELS['needs_revision']}:    {summary['proposal_counts'].get('needs_revision', 0)}")
     print(f"{STATUS_LABELS['adopted_global_edits']}: {summary['adopted_global_edits']}")
     print(f"{STATUS_LABELS['rejected_global_proposals']}: {summary['rejected_global_proposals']}")
-
-
-def command_global_merge_suggestions(args: argparse.Namespace) -> None:
-    ensure_global_runtime(args)
-    clusters = read_global_clusters(args).get("clusters", {})
-    candidates = []
-    items = [
-        (fingerprint, cluster)
-        for fingerprint, cluster in sorted(clusters.items())
-        if cluster.get("status") not in {"adopted", "cooldown"}
-    ]
-    token_cache = {fingerprint: cluster_tokens(cluster) for fingerprint, cluster in items}
-    for left_index, (left_fp, left_cluster) in enumerate(items):
-        for right_fp, right_cluster in items[left_index + 1:]:
-            if left_cluster.get("operator") != right_cluster.get("operator"):
-                continue
-            score = jaccard(token_cache[left_fp], token_cache[right_fp])
-            if score < args.min_similarity:
-                continue
-            overlap = sorted(token_cache[left_fp] & token_cache[right_fp])[:12]
-            candidates.append({
-                "left": left_fp,
-                "right": right_fp,
-                "operator": left_cluster.get("operator", ""),
-                "similarity": round(score, 3),
-                "left_method": left_cluster.get("method_key", ""),
-                "right_method": right_cluster.get("method_key", ""),
-                "shared_terms": overlap,
-                "recommendation": "merge_candidate",
-                "safety": "review only; this command never mutates global clusters",
-            })
-    candidates.sort(key=lambda item: item["similarity"], reverse=True)
-    candidates = candidates[: max(0, args.limit)]
-    if args.json:
-        print(json.dumps({"merge_suggestions": candidates}, ensure_ascii=False, indent=2))
-        return
-    if not candidates:
-        print("No global merge suggestions.")
-        return
-    print("Global merge suggestions:")
-    for item in candidates:
-        print(
-            f"- {item['left']} <-> {item['right']}  "
-            f"similarity={item['similarity']}  operator={item['operator']}"
-        )
-        print(f"  left:  {item['left_method']}")
-        print(f"  right: {item['right_method']}")
-        print(f"  shared_terms: {', '.join(item['shared_terms'])}")
-        print("  action: review before any merge proposal; no files were changed.")
-
-
-def wake_check_result(text: str) -> dict:
-    normalized = " ".join(str(text or "").strip().split()).lower()
-    positive = regex_hits(WAKE_POSITIVE_PATTERNS, normalized)
-    negative = regex_hits(WAKE_NEGATIVE_PATTERNS, normalized)
-    classification = classify_user_correction(text)
-    should_route = (
-        classification["input_state"] == "strong_user_correction"
-        or (bool(positive) and not (negative and len(positive) == 1 and "jinhua" not in normalized))
-    )
-    if should_route:
-        reason = "meta-workflow correction or Skill-evolution cue"
-    elif negative:
-        reason = "likely task-local correction"
-    else:
-        reason = "no reusable workflow cue"
-    return {
-        "legacy": True,
-        "should_route": should_route,
-        "reason": reason,
-        "input_state": classification["input_state"],
-        "positive_matches": positive[:3],
-        "negative_matches": negative[:3],
-        "next_command": "cycle" if should_route else "",
-    }
 
 
 def classify_user_correction(text: str) -> dict:
@@ -1913,25 +1910,6 @@ def input_internal_context(input_state: str) -> str:
 
 def join_contexts(*parts: str) -> str:
     return " ".join(part.strip() for part in parts if part and part.strip())
-
-
-def command_wake_check(args: argparse.Namespace) -> None:
-    if not args.json:
-        print("warning: wake-check is legacy; use classify-input or Codex trigger hooks for the primary path.")
-    if args.text:
-        text = args.text
-    else:
-        text = sys.stdin.read()
-    result = wake_check_result(text)
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        print(f"should_route: {str(result['should_route']).lower()}")
-        print(f"reason: {result['reason']}")
-        if result["next_command"]:
-            print(f"next: {result['next_command']}")
-    if args.exit_code and not result["should_route"]:
-        raise SystemExit(1)
 
 
 def extract_hook_prompt(payload: object) -> str:
@@ -2030,46 +2008,6 @@ def hook_project_root_info(payload: dict, args: argparse.Namespace | None) -> tu
 def hook_project_root(payload: dict, args: argparse.Namespace | None) -> Path:
     root, _ = hook_project_root_info(payload, args)
     return root or Path.cwd().resolve()
-
-
-def hook_cycle_command(payload: dict, args: argparse.Namespace | None) -> str:
-    root = hook_project_root(payload, args)
-    return f'python "{Path(__file__).resolve()}" --project-root "{root}" cycle'
-
-
-def user_prompt_submit_hook_output(payload: dict, args: argparse.Namespace | None = None) -> dict:
-    prompt = extract_hook_prompt(payload)
-    result = wake_check_result(prompt)
-    output: dict = {"continue": True}
-    if not result["should_route"]:
-        return output
-
-    context = (
-        "jinhua wake-check matched a reusable workflow or Skill-evolution cue. "
-        "Load/use the jinhua Skill now and run: "
-        f"{hook_cycle_command(payload, args)}. "
-        "Then apply the Trigger Boundary and Correction-Act Detector. "
-        "Log only if the lesson can become a reusable trigger plus action; "
-        "do not apply edits without the user gate."
-    )
-    output["hookSpecificOutput"] = {
-        "hookEventName": "UserPromptSubmit",
-        "additionalContext": context,
-    }
-    return output
-
-
-def command_hook_user_prompt_submit(args: argparse.Namespace) -> None:
-    print(
-        "warning: hook-user-prompt-submit is legacy; use codex-user-prompt-submit for the primary trigger layer.",
-        file=sys.stderr,
-    )
-    if args.text:
-        payload = {"hook_event_name": "UserPromptSubmit", "prompt": args.text}
-    else:
-        payload = read_hook_payload(read_hook_stdin())
-    output = user_prompt_submit_hook_output(payload, args)
-    print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
 
 
 def apply_payload_project_root(args: argparse.Namespace, payload: dict) -> bool:
@@ -2247,14 +2185,7 @@ def hook_turn_id(payload: dict) -> str:
 
 
 def periodic_stop_interval() -> int:
-    raw = os.environ.get("JINHUA_PERIODIC_STOP_INTERVAL", "").strip()
-    if not raw:
-        return DEFAULT_PERIODIC_STOP_INTERVAL
-    try:
-        value = int(raw)
-    except ValueError:
-        return DEFAULT_PERIODIC_STOP_INTERVAL
-    return max(0, value)
+    return DEFAULT_PERIODIC_STOP_INTERVAL
 
 
 def jinhua_entry_from_payload(payload: dict) -> str:
@@ -2412,53 +2343,7 @@ def command_codex_post_tool_use(args: argparse.Namespace) -> None:
     print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
 
 
-def extract_assistant_message(payload: dict) -> str:
-    for key in ("last_assistant_message", "assistant_message", "response", "message", "text"):
-        value = payload.get(key)
-        if isinstance(value, str):
-            return value
-    for parent_key in ("output", "payload", "event"):
-        parent = payload.get(parent_key)
-        if isinstance(parent, dict):
-            value = extract_assistant_message(parent)
-            if value:
-                return value
-    return ""
-
-
-def parse_output_state(text: str) -> dict:
-    raw = str(text or "")
-    fields: dict[str, str] = {}
-    pattern = re.compile(r"(?im)^\s*(output_state|visibility|reason)\s*:\s*(.*?)\s*$")
-    matches = list(pattern.finditer(raw))
-    for match in matches[-3:]:
-        fields[match.group(1).lower()] = match.group(2).strip()
-
-    state = fields.get("output_state", "")
-    visibility = fields.get("visibility", "")
-    valid = state in OUTPUT_STATES and visibility in OUTPUT_VISIBILITIES
-
-    stripped = raw
-    if matches:
-        start = matches[-1].start()
-        for match in reversed(matches):
-            if raw[match.end():start].strip() == "":
-                start = match.start()
-            else:
-                break
-        stripped = raw[:start].rstrip()
-
-    return {
-        "valid": valid,
-        "output_state": state if state in OUTPUT_STATES else "",
-        "visibility": visibility if visibility in OUTPUT_VISIBILITIES else "",
-        "reason": fields.get("reason", ""),
-        "user_visible_text": stripped,
-        "had_tail": bool(matches),
-    }
-
-
-def stop_ticket_once(args: argparse.Namespace, session_id: str, turn_id: str, kind: str = "missing_tail") -> bool:
+def stop_ticket_once(args: argparse.Namespace, session_id: str, turn_id: str, kind: str = "periodic") -> bool:
     state = read_guard_state(args)
     key = f"{kind}:{session_id}:{turn_id}"
     if key in state.get("stop_tickets", []):
@@ -2469,8 +2354,6 @@ def stop_ticket_once(args: argparse.Namespace, session_id: str, turn_id: str, ki
 
 
 def codex_stop_output(payload: dict, args: argparse.Namespace) -> dict:
-    message = extract_assistant_message(payload)
-    parsed = parse_output_state(message)
     session_id = hook_session_id(payload)
     turn_id = hook_turn_id(payload)
     output: dict = {"continue": True}
@@ -2480,6 +2363,9 @@ def codex_stop_output(payload: dict, args: argparse.Namespace) -> dict:
         return output
     periodic = consume_periodic_stop_due(args, session_id)
     if periodic["due"]:
+        guard = invocation_guard(args, session_id, turn_id, "stop", "periodic", "periodic", mark=False)
+        if guard["decision"] != "allow":
+            return output
         if stop_ticket_once(args, session_id, turn_id, "periodic"):
             output["decision"] = "block"
             output["reason"] = (
@@ -2487,28 +2373,7 @@ def codex_stop_output(payload: dict, args: argparse.Namespace) -> dict:
                 "If found, use jinhua rules; otherwise stay silent."
             )
         return output
-
-    if not parsed["had_tail"]:
-        stop_ticket_once(args, session_id, turn_id, "missing_tail")
-        return output
-
-    if parsed["output_state"] != "jinhua_candidate":
-        return output
-
-    guard = invocation_guard(args, session_id, turn_id, "stop", parsed.get("reason", ""), "output_state", mark=False)
-    if guard["decision"] == "allow" and stop_ticket_once(args, session_id, turn_id, "candidate"):
-        output["decision"] = "block"
-        output["reason"] = (
-            "Jinhua candidate: if this exposes a reusable trigger plus action, use the existing "
-            "jinhua cycle/log-signal/propose flow; do not bypass the user gate."
-        )
     return output
-
-
-def command_parse_output_state(args: argparse.Namespace) -> None:
-    text = args.text if args.text else sys.stdin.read()
-    result = parse_output_state(text)
-    print(json.dumps(result, ensure_ascii=False, indent=2 if args.pretty else None))
 
 
 def command_codex_stop(args: argparse.Namespace) -> None:
@@ -2527,8 +2392,8 @@ def command_global_propose(args: argparse.Namespace) -> None:
         raise SystemExit(f"Global cluster not found: {args.method_fingerprint!r}")
     if cluster.get("status") == "cooldown" and cooldown_is_active(cluster):
         raise SystemExit(f"Global cluster is in cooldown: {args.method_fingerprint}")
-    if cluster.get("status") not in {"ready", "proposed"} and not args.force:
-        raise SystemExit("Global cluster is not ready. Use --force only for an explicit immediate trigger.")
+    if cluster.get("status") not in {"ready", "proposed"}:
+        raise SystemExit("Global cluster is not ready.")
 
     records_by_id = {record.get("id", ""): record for record in read_jsonl(global_signal_path(args))}
     sample_records = [
@@ -2538,10 +2403,16 @@ def command_global_propose(args: argparse.Namespace) -> None:
     ]
     skeleton = global_proposal_skeleton(cluster, sample_records, args)
     placement = normalize_placement(args.placement, skeleton.get("placement_hint", "personal_global_skill"))
+    if placement not in GLOBAL_PROPOSAL_PLACEMENTS:
+        raise SystemExit("Global proposals may use only skill_patch or personal_global_skill.")
     placement_reason = args.placement_reason or skeleton.get("placement_reason", "")
     recommended_skill = args.recommended_skill or skeleton.get("recommended_skill", "")
     recommended_skill_path = args.recommended_skill_path or skeleton.get("recommended_skill_path", "")
-    target = args.target or skeleton.get("target_hint", "") or "[target Skill / file / insertion location]"
+    if placement == "skill_patch" and (not recommended_skill or not recommended_skill_path):
+        raise SystemExit("skill_patch requires a concrete recommended local Skill and path.")
+    target = require_concrete_text(args.target, "--target")
+    patch = require_markdown_patch(args.patch)
+    risk = require_concrete_text(args.risk, "--risk")
 
     proposal_id = make_id("gprop")
     proposal = {
@@ -2550,8 +2421,7 @@ def command_global_propose(args: argparse.Namespace) -> None:
         "method_fingerprint": args.method_fingerprint,
         "method_key": cluster.get("method_key", ""),
         "operator": cluster.get("operator", ""),
-        "decision": args.decision,
-        "trigger": cluster.get("ready_reason") or "forced immediate global proposal",
+        "trigger": cluster.get("ready_reason", ""),
         "evidence_global_signal_ids": list(cluster.get("sample_global_signal_ids", []))[-3:],
         "placement": placement,
         "placement_reason": placement_reason,
@@ -2559,13 +2429,13 @@ def command_global_propose(args: argparse.Namespace) -> None:
         "recommended_skill_path": recommended_skill_path,
         "recommended_skill_reason": skeleton.get("recommended_skill_reason", ""),
         "target": target,
-        "patch": args.patch or "[1-3 sentence patch or structured operator definition]",
-        "risk": args.risk or "[main risk or side effect]",
+        "patch": patch,
+        "risk": risk,
         "project_count": len(set(cluster.get("project_hashes", []))),
         "evidence_count": int(cluster.get("evidence_count", 0)),
         "strength_sum": int(cluster.get("strength_sum", 0)),
         "status": "pending_user_gate",
-        "user_gate": PLACEMENT_USER_GATE,
+        "user_gate": GLOBAL_USER_GATE,
     }
     append_jsonl(global_proposal_path(args), proposal)
     cluster["status"] = "proposed"
@@ -2581,9 +2451,6 @@ def command_global_propose(args: argparse.Namespace) -> None:
 
 Trigger:
 {proposal['trigger']}
-
-Decision:
-{proposal['decision']}
 
 Recommended placement:
 {proposal['placement']}
@@ -2621,31 +2488,28 @@ Proposal ID:
 def command_global_apply(args: argparse.Namespace) -> None:
     ensure_global_runtime(args)
     proposals, proposal = get_global_proposal(args, args.proposal_id)
-    if proposal.get("status") != "pending_user_gate" and not args.force:
-        raise SystemExit("Global proposal is not pending user gate. Use --force to override.")
+    if proposal.get("status") != "pending_user_gate":
+        raise SystemExit("Global proposal is not pending user gate.")
 
-    final_placement = normalize_placement(args.placement, proposal.get("placement", ""))
-    if args.placement:
-        proposal["placement"] = final_placement
+    final_placement = normalize_placement(args.placement)
+    if final_placement not in GLOBAL_PROPOSAL_PLACEMENTS:
+        raise SystemExit("Global proposals may use only skill_patch or personal_global_skill.")
+    if final_placement == "skill_patch" and (
+        not proposal.get("recommended_skill") or not proposal.get("recommended_skill_path")
+    ):
+        raise SystemExit(
+            "skill_patch adoption requires a proposal with a concrete recommended Skill and path; "
+            "revise the proposal first."
+        )
+    proposal["placement"] = final_placement
     if args.placement_reason:
         proposal["placement_reason"] = args.placement_reason
-
-    applied_path = ""
-    write_status = ""
-    if args.target_skill_path:
-        target = Path(args.target_skill_path).resolve()
-        if not target.exists():
-            raise SystemExit(f"Target file not found: {target}")
-        validate_skill_write_target(args, target)
-        patch = args.patch or proposal.get("patch", "")
-        if not patch or patch.startswith("["):
-            raise SystemExit("No concrete patch content supplied. Provide --patch.")
-        write_status = apply_text_patch(target, patch, args.insert_after)
-        applied_path = str(target)
+    applied_target = require_concrete_text(args.applied_target, "--applied-target")
+    edit_summary = require_concrete_text(args.summary, "--summary")
 
     proposal["status"] = "applied"
     proposal["applied_at"] = utc_now()
-    proposal["applied_path"] = applied_path
+    proposal["applied_target"] = applied_target
     save_global_proposals(args, proposals)
 
     cluster_state = read_global_clusters(args)
@@ -2660,25 +2524,22 @@ def command_global_apply(args: argparse.Namespace) -> None:
         "proposal_id": proposal["id"],
         "method_fingerprint": proposal["method_fingerprint"],
         "method_key": proposal.get("method_key", ""),
-        "target_skill": args.target_skill or proposal.get("target", ""),
-        "edit_summary": args.summary or proposal.get("patch", "")[:160],
-        "decision": proposal.get("decision", ""),
+        "applied_target": applied_target,
+        "edit_summary": edit_summary,
         "placement": proposal.get("placement", ""),
         "placement_reason": proposal.get("placement_reason", ""),
         "recommended_skill": proposal.get("recommended_skill", ""),
         "recommended_skill_path": proposal.get("recommended_skill_path", ""),
-        "applied_path": applied_path,
-        "write_status": write_status,
     }
     append_jsonl(adopted_global_path(args), adopt_record)
-    print(json.dumps({"applied": True, "id": adopt_record["id"], "applied_path": applied_path}, ensure_ascii=False))
+    print(json.dumps({"applied": True, "id": adopt_record["id"], "applied_target": applied_target}, ensure_ascii=False))
 
 
 def command_global_reject(args: argparse.Namespace) -> None:
     ensure_global_runtime(args)
     proposals, proposal = get_global_proposal(args, args.proposal_id)
-    if proposal.get("status") not in {"pending_user_gate", "needs_revision"} and not args.force:
-        raise SystemExit("Global proposal is not rejectable. Use --force to override.")
+    if proposal.get("status") not in {"pending_user_gate", "needs_revision"}:
+        raise SystemExit("Global proposal is not rejectable.")
 
     if args.revision:
         proposal["status"] = "needs_revision"
@@ -2696,10 +2557,7 @@ def command_global_reject(args: argparse.Namespace) -> None:
     cluster_state = read_global_clusters(args)
     cluster = cluster_state.get("clusters", {}).get(proposal["method_fingerprint"], {})
     cluster["status"] = "cooldown"
-    cluster["cooldown_until"] = (datetime.now(timezone.utc) + timedelta(days=args.cooldown_days)).replace(
-        microsecond=0
-    ).isoformat().replace("+00:00", "Z")
-    cluster["cooldown_signal_remaining"] = args.cooldown_signals
+    cluster["cooldown_signal_remaining"] = COOLDOWN_SIGNAL_LIMIT
     cluster_state["clusters"][proposal["method_fingerprint"]] = cluster
     write_global_clusters(cluster_state, args)
 
@@ -2710,7 +2568,6 @@ def command_global_reject(args: argparse.Namespace) -> None:
         "method_fingerprint": proposal["method_fingerprint"],
         "method_key": proposal.get("method_key", ""),
         "reason": args.reason,
-        "cooldown_until": cluster["cooldown_until"],
         "cooldown_signal_remaining": cluster["cooldown_signal_remaining"],
         "evidence_global_signal_ids": proposal.get("evidence_global_signal_ids", []),
     }
@@ -2730,25 +2587,17 @@ def initialize_runtime(args: argparse.Namespace, quiet: bool = False) -> None:
     data = data_dir(args)
     data.mkdir(parents=True, exist_ok=True)
 
-    seed_data = skill_root() / "data"
     for filename in JSONL_FILES:
         target = data / filename
         if target.exists():
             continue
-        source = seed_data / filename
-        if filename == "crystallized-operators.jsonl" and source.exists():
-            shutil.copyfile(source, target)
-        else:
-            target.write_text("", encoding="utf-8")
+        target.write_text("", encoding="utf-8")
 
     for filename in JSON_FILES:
         target = data / filename
         if target.exists():
             continue
-        source = seed_data / filename
-        if source.exists():
-            shutil.copyfile(source, target)
-        elif filename == "cluster-state.json":
+        if filename == "cluster-state.json":
             write_json(target, default_cluster_state())
         else:
             write_json(target, default_state())
@@ -2771,7 +2620,6 @@ def command_log_signal(args: argparse.Namespace) -> None:
     operator = normalize_operator(args.operator)
     validate_cluster_key(args.cluster_key, operator)
     strength = clamp_strength(int(args.strength))
-    confidence = clamp_confidence(getattr(args, "confidence", None))
     signal_id = make_id("sig")
     signal = {
         "id": signal_id,
@@ -2790,8 +2638,6 @@ def command_log_signal(args: argparse.Namespace) -> None:
         value = compact_text(getattr(args, field, ""), limit=220)
         if value:
             signal[field] = value
-    if confidence is not None:
-        signal["confidence"] = confidence
     append_jsonl(data_dir(args) / "signals.jsonl", signal)
     cluster = update_cluster_for_signal(args, signal)
     state = read_state(args)
@@ -2820,9 +2666,8 @@ def command_list_clusters(args: argparse.Namespace) -> None:
         )
         if c.get("ready_reason"):
             print(f"  ready_reason: {c.get('ready_reason')}")
-        if c.get("cooldown_until") or c.get("cooldown_signal_remaining"):
-            print(f"  cooldown_until: {c.get('cooldown_until', '')}  "
-                  f"cooldown_signal_remaining: {c.get('cooldown_signal_remaining', 0)}")
+        if c.get("cooldown_signal_remaining"):
+            print(f"  cooldown_signal_remaining: {c.get('cooldown_signal_remaining', 0)}")
 
 
 def find_signals_for_cluster(args: argparse.Namespace, cluster_key: str) -> list[dict]:
@@ -2839,8 +2684,8 @@ def command_propose(args: argparse.Namespace) -> None:
         raise SystemExit(f"Cluster not found: {args.cluster_key!r}")
     if cluster.get("status") == "cooldown" and cooldown_is_active(cluster):
         raise SystemExit(f"Cluster is in cooldown: {args.cluster_key}")
-    if cluster.get("status") not in {"ready", "proposed"} and not args.force:
-        raise SystemExit("Cluster is not ready. Use --force only when the model has an explicit immediate trigger.")
+    if cluster.get("status") not in {"ready", "proposed"}:
+        raise SystemExit("Cluster is not ready.")
 
     signals = find_signals_for_cluster(args, args.cluster_key)
     evidence = signals[-3:]
@@ -2849,14 +2694,19 @@ def command_propose(args: argparse.Namespace) -> None:
     placement_reason = args.placement_reason or skeleton.get("placement_reason", "")
     recommended_skill = args.recommended_skill or skeleton.get("recommended_skill", "")
     recommended_skill_path = args.recommended_skill_path or skeleton.get("recommended_skill_path", "")
-    target = args.target or skeleton.get("target_hint", "") or "[target Skill / file / insertion location]"
+    if placement == "skill_patch" and (not recommended_skill or not recommended_skill_path):
+        raise SystemExit("skill_patch requires a concrete recommended local Skill and path.")
+    if placement == "project_rule" and not skeleton.get("recommended_project_rule_file"):
+        raise SystemExit("project_rule requires a concrete recommended project rule file.")
+    target = require_concrete_text(args.target, "--target")
+    patch = require_markdown_patch(args.patch)
+    risk = require_concrete_text(args.risk, "--risk")
     proposal_id = make_id("prop")
     proposal = {
         "id": proposal_id,
         "timestamp": utc_now(),
         "cluster_key": args.cluster_key,
-        "decision": args.decision,
-        "trigger": cluster.get("ready_reason") or "forced immediate proposal",
+        "trigger": cluster.get("ready_reason", ""),
         "evidence_signal_ids": [s["id"] for s in evidence],
         "placement": placement,
         "placement_reason": placement_reason,
@@ -2869,8 +2719,8 @@ def command_propose(args: argparse.Namespace) -> None:
         "recommended_project_rule_reason": skeleton.get("recommended_project_rule_reason", ""),
         "project_rule_candidates": skeleton.get("project_rule_candidates", []),
         "target": target,
-        "patch": args.patch or "[1-3 sentence patch or structured operator definition]",
-        "risk": args.risk or "[main risk or side effect]",
+        "patch": patch,
+        "risk": risk,
         "status": "pending_user_gate",
         "user_gate": PLACEMENT_USER_GATE,
     }
@@ -2888,9 +2738,6 @@ def command_propose(args: argparse.Namespace) -> None:
 
 Trigger:
 {proposal['trigger']}
-
-Decision:
-{proposal['decision']}
 
 Recommended placement:
 {proposal['placement']}
@@ -2950,31 +2797,31 @@ def get_proposal(args: argparse.Namespace, proposal_id: str) -> tuple[list[dict]
 def command_apply_proposal(args: argparse.Namespace) -> None:
     ensure_runtime(args)
     proposals, proposal = get_proposal(args, args.proposal_id)
-    if proposal.get("status") != "pending_user_gate" and not args.force:
-        raise SystemExit("Proposal is not pending user gate. Use --force to override.")
+    if proposal.get("status") != "pending_user_gate":
+        raise SystemExit("Proposal is not pending user gate.")
 
-    final_placement = normalize_placement(args.placement, proposal.get("placement", ""))
-    if args.placement:
-        proposal["placement"] = final_placement
+    final_placement = normalize_placement(args.placement)
+    if final_placement == "skill_patch" and (
+        not proposal.get("recommended_skill") or not proposal.get("recommended_skill_path")
+    ):
+        raise SystemExit(
+            "skill_patch adoption requires a proposal with a concrete recommended Skill and path; "
+            "revise the proposal first."
+        )
+    if final_placement == "project_rule" and not proposal.get("recommended_project_rule_file"):
+        raise SystemExit(
+            "project_rule adoption requires a proposal with a concrete project rule file; "
+            "revise the proposal first."
+        )
+    proposal["placement"] = final_placement
     if args.placement_reason:
         proposal["placement_reason"] = args.placement_reason
-
-    applied_path = ""
-    write_status = ""
-    if args.target_skill_path:
-        target = Path(args.target_skill_path).resolve()
-        if not target.exists():
-            raise SystemExit(f"Target file not found: {target}")
-        validate_skill_write_target(args, target)
-        patch = args.patch or proposal.get("patch", "")
-        if not patch or patch.startswith("["):
-            raise SystemExit("No concrete patch content supplied. Provide --patch.")
-        write_status = apply_text_patch(target, patch, args.insert_after)
-        applied_path = str(target)
+    applied_target = require_concrete_text(args.applied_target, "--applied-target")
+    edit_summary = require_concrete_text(args.summary, "--summary")
 
     proposal["status"] = "applied"
     proposal["applied_at"] = utc_now()
-    proposal["applied_path"] = applied_path
+    proposal["applied_target"] = applied_target
     save_proposals(args, proposals)
 
     cluster_state = read_cluster_state(args)
@@ -2988,9 +2835,8 @@ def command_apply_proposal(args: argparse.Namespace) -> None:
         "timestamp": utc_now(),
         "proposal_id": proposal["id"],
         "cluster_key": proposal["cluster_key"],
-        "target_skill": args.target_skill or proposal.get("target", ""),
-        "edit_summary": args.summary or proposal.get("patch", "")[:160],
-        "decision": proposal.get("decision", ""),
+        "applied_target": applied_target,
+        "edit_summary": edit_summary,
         "placement": proposal.get("placement", ""),
         "placement_reason": proposal.get("placement_reason", ""),
         "recommended_skill": proposal.get("recommended_skill", ""),
@@ -2999,22 +2845,20 @@ def command_apply_proposal(args: argparse.Namespace) -> None:
         "recommended_project_rule_file": proposal.get("recommended_project_rule_file", ""),
         "recommended_project_rule_path": proposal.get("recommended_project_rule_path", ""),
         "recommended_project_rule_reason": proposal.get("recommended_project_rule_reason", ""),
-        "applied_path": applied_path,
-        "write_status": write_status,
     }
     append_jsonl(data_dir(args) / "adopted-edits.jsonl", adopt_record)
 
     state = read_state(args)
     state["adopted_edit_count"] = int(state.get("adopted_edit_count", 0)) + 1
     write_state(args, state)
-    print(json.dumps({"applied": True, "id": adopt_record["id"], "applied_path": applied_path}, ensure_ascii=False))
+    print(json.dumps({"applied": True, "id": adopt_record["id"], "applied_target": applied_target}, ensure_ascii=False))
 
 
 def command_reject_proposal(args: argparse.Namespace) -> None:
     ensure_runtime(args)
     proposals, proposal = get_proposal(args, args.proposal_id)
-    if proposal.get("status") not in {"pending_user_gate", "needs_revision"} and not args.force:
-        raise SystemExit("Proposal is not rejectable. Use --force to override.")
+    if proposal.get("status") not in {"pending_user_gate", "needs_revision"}:
+        raise SystemExit("Proposal is not rejectable.")
 
     if args.revision:
         proposal["status"] = "needs_revision"
@@ -3032,10 +2876,7 @@ def command_reject_proposal(args: argparse.Namespace) -> None:
     cluster_state = read_cluster_state(args)
     cluster = cluster_state.get("clusters", {}).get(proposal["cluster_key"], {})
     cluster["status"] = "cooldown"
-    cluster["cooldown_until"] = (datetime.now(timezone.utc) + timedelta(days=args.cooldown_days)).replace(
-        microsecond=0
-    ).isoformat().replace("+00:00", "Z")
-    cluster["cooldown_signal_remaining"] = args.cooldown_signals
+    cluster["cooldown_signal_remaining"] = COOLDOWN_SIGNAL_LIMIT
     cluster_state["clusters"][proposal["cluster_key"]] = cluster
     write_cluster_state(args, cluster_state)
 
@@ -3045,7 +2886,6 @@ def command_reject_proposal(args: argparse.Namespace) -> None:
         "proposal_id": proposal["id"],
         "cluster_key": proposal["cluster_key"],
         "reason": args.reason,
-        "cooldown_until": cluster["cooldown_until"],
         "cooldown_signal_remaining": cluster["cooldown_signal_remaining"],
         "evidence_signal_ids": proposal.get("evidence_signal_ids", []),
     }
@@ -3055,26 +2895,6 @@ def command_reject_proposal(args: argparse.Namespace) -> None:
     state["rejected_proposal_count"] = int(state.get("rejected_proposal_count", 0)) + 1
     write_state(args, state)
     print(json.dumps({"rejected": True, "id": reject_record["id"]}, ensure_ascii=False))
-
-
-def command_compact(args: argparse.Namespace) -> None:
-    ensure_runtime(args)
-    signals_path = data_dir(args) / "signals.jsonl"
-    signals = read_jsonl(signals_path)
-    cluster_state = read_cluster_state(args)
-    sample_ids: set[str] = set()
-    for cluster in cluster_state.get("clusters", {}).values():
-        sample_ids.update(cluster.get("sample_signal_ids", []))
-    retained: list[dict] = []
-    compacted = 0
-    for signal in signals:
-        if signal.get("id") in sample_ids or signal.get("strength", 1) >= args.keep_strength_at_least:
-            retained.append(signal)
-        else:
-            compacted += 1
-    if not args.dry_run:
-        write_jsonl(signals_path, retained)
-    print(json.dumps({"dry_run": args.dry_run, "retained": len(retained), "compacted": compacted}, ensure_ascii=False))
 
 
 def command_status(args: argparse.Namespace) -> None:
@@ -3137,7 +2957,6 @@ def collect_runtime_summary(args: argparse.Namespace) -> dict:
             pending_proposals.append({
                 "proposal_id": proposal.get("id", ""),
                 "cluster_key": proposal.get("cluster_key", ""),
-                "decision": proposal.get("decision", ""),
                 "placement": proposal.get("placement", ""),
                 "recommended_skill": proposal.get("recommended_skill", ""),
                 "recommended_project_rule_file": proposal.get("recommended_project_rule_file", ""),
@@ -3167,6 +2986,8 @@ def command_cycle(args: argparse.Namespace) -> None:
             raise SystemExit("Runtime directory not initialized. Run without --no-init to create it.")
         initialize_runtime(args, quiet=True)
         initialized = True
+    else:
+        migrate_local_runtime(args)
 
     summary = collect_runtime_summary(args)
     summary["initialized"] = initialized
@@ -3223,7 +3044,7 @@ def command_cycle(args: argparse.Namespace) -> None:
         for proposal in summary["pending_proposals"]:
             print(
                 f"- {proposal['proposal_id']}  status={proposal['status']}  "
-                f"decision={proposal['decision']}  placement={proposal.get('placement', '')}  "
+                f"placement={proposal.get('placement', '')}  "
                 f"cluster={proposal['cluster_key']}"
             )
             if proposal.get("recommended_skill"):
@@ -3234,7 +3055,7 @@ def command_cycle(args: argparse.Namespace) -> None:
         for proposal in global_summary["pending_proposals"]:
             print(
                 f"- {proposal['proposal_id']}  status={proposal['status']}  "
-                f"decision={proposal['decision']}  placement={proposal.get('placement', '')}  "
+                f"placement={proposal.get('placement', '')}  "
                 f"method={proposal['method_fingerprint']}"
             )
             if proposal.get("recommended_skill"):
@@ -3307,10 +3128,9 @@ def command_validate(args: argparse.Namespace) -> None:
 
     required_by_file = {
         "signals.jsonl": ["id", "timestamp", "source_type", "summary", "context", "operator", "cluster_key", "strength", "status"],
-        "proposals.jsonl": ["id", "timestamp", "cluster_key", "decision", "trigger", "evidence_signal_ids", "target", "patch", "risk", "status"],
-        "adopted-edits.jsonl": ["id", "timestamp"],
-        "rejected-proposals.jsonl": ["id", "timestamp", "proposal_id", "cluster_key", "reason"],
-        "crystallized-operators.jsonl": ["id", "name", "type", "record_status", "operator_tier", "four_gates", "intelligence_score", "score_evidence"],
+        "proposals.jsonl": ["id", "timestamp", "cluster_key", "trigger", "evidence_signal_ids", "target", "patch", "risk", "status", "placement"],
+        "adopted-edits.jsonl": ["id", "timestamp", "proposal_id", "applied_target", "edit_summary", "placement"],
+        "rejected-proposals.jsonl": ["id", "timestamp", "proposal_id", "cluster_key", "reason", "cooldown_signal_remaining"],
     }
 
     signal_ids: set[str] = set()
@@ -3349,48 +3169,45 @@ def command_validate(args: argparse.Namespace) -> None:
                     if field in record and not isinstance(record.get(field), str):
                         errors.append(f"{path}:{index}: {field} must be a string")
                 if "confidence" in record:
-                    try:
-                        confidence = float(record.get("confidence"))
-                        if confidence < 0 or confidence > 1:
-                            errors.append(f"{path}:{index}: confidence must be 0..1")
-                    except (TypeError, ValueError):
-                        errors.append(f"{path}:{index}: invalid confidence")
+                    errors.append(f"{path}:{index}: removed field 'confidence'")
 
             if filename == "proposals.jsonl":
                 if record.get("cluster_key") not in cluster_keys:
                     errors.append(f"{path}:{index}: proposal references missing cluster_key")
-                if record.get("decision") not in PROPOSAL_DECISIONS:
-                    errors.append(f"{path}:{index}: invalid decision: {record.get('decision')!r}")
-                if "placement" in record and record.get("placement") not in PROPOSAL_PLACEMENTS:
+                if "decision" in record:
+                    errors.append(f"{path}:{index}: removed field 'decision'")
+                if record.get("placement") not in PROPOSAL_PLACEMENTS:
                     errors.append(f"{path}:{index}: invalid placement: {record.get('placement')!r}")
                 if record.get("status") not in PROPOSAL_STATUSES:
                     errors.append(f"{path}:{index}: invalid proposal status: {record.get('status')!r}")
+                if record.get("status") in {"pending_user_gate", "needs_revision"}:
+                    if not str(record.get("target", "")).strip() or str(record.get("target", "")).startswith("["):
+                        errors.append(f"{path}:{index}: target must be concrete")
+                    if not re.search(r"(?m)^#{1,6}\s+\S", str(record.get("patch", ""))):
+                        errors.append(f"{path}:{index}: patch must be a complete Markdown block")
+                    if not str(record.get("risk", "")).strip() or str(record.get("risk", "")).startswith("["):
+                        errors.append(f"{path}:{index}: risk must be concrete")
+                    if record.get("placement") == "skill_patch" and (
+                        not record.get("recommended_skill") or not record.get("recommended_skill_path")
+                    ):
+                        errors.append(f"{path}:{index}: skill_patch requires recommended Skill and path")
+                    if record.get("placement") == "project_rule" and not record.get("recommended_project_rule_file"):
+                        errors.append(f"{path}:{index}: project_rule requires recommended project rule file")
                 for sid in record.get("evidence_signal_ids", []):
                     if sid not in signal_ids:
                         errors.append(f"{path}:{index}: proposal references missing signal id: {sid}")
 
-            if filename == "crystallized-operators.jsonl":
-                if record.get("record_status") not in {"crystallized", "candidate", "proven", "rejected", "merged"}:
-                    errors.append(f"{path}:{index}: unexpected record_status for crystallized-operators")
-                if record.get("operator_tier") not in OPERATOR_TIERS:
-                    errors.append(f"{path}:{index}: invalid operator_tier: {record.get('operator_tier')!r}")
-                _validate_four_gates(record, path, index, errors)
-                _validate_score_evidence(record, path, index, errors)
+            for removed_field in ["cooldown_until", "applied_path", "write_status", "target_skill"]:
+                if removed_field in record:
+                    errors.append(f"{path}:{index}: removed field '{removed_field}'")
 
     _validate_cluster_state(args, signal_ids, errors)
     _validate_state(args, errors)
     if global_runtime_exists(args):
         _validate_global_runtime(args, errors)
 
-    crystallized_path = data / "crystallized-operators.jsonl"
-    try:
-        crystallized = read_jsonl(crystallized_path)
-        core_ids = {item.get("id") for item in crystallized if item.get("operator_tier") == "core"}
-        missing_core = [oid for oid in CORE_OPERATOR_IDS if oid not in core_ids]
-        if missing_core:
-            errors.append(f"missing required core operators: {', '.join(missing_core)}")
-    except ValueError:
-        pass
+    if (data / "crystallized-operators.jsonl").exists():
+        errors.append(f"{data / 'crystallized-operators.jsonl'}: removed operator seed file still exists")
 
     if errors:
         print("Validation failed:")
@@ -3403,6 +3220,12 @@ def command_validate(args: argparse.Namespace) -> None:
 def _validate_global_runtime(args: argparse.Namespace, errors: list[str]) -> None:
     ensure_global_runtime(args)
     data = global_data_dir(args)
+    try:
+        state = read_global_state(args)
+        if state.get("schema_version") != "2.0":
+            errors.append(f"{global_state_path(args)}: schema_version must be 2.0")
+    except Exception as exc:
+        errors.append(f"{global_state_path(args)}: invalid JSON: {exc}")
     required_by_file = {
         "global-signals.jsonl": [
             "id", "timestamp", "project_hash", "source_signal_id", "dedupe_key",
@@ -3410,11 +3233,11 @@ def _validate_global_runtime(args: argparse.Namespace, errors: list[str]) -> Non
             "strength", "status",
         ],
         "global-proposals.jsonl": [
-            "id", "timestamp", "method_fingerprint", "decision", "trigger",
-            "evidence_global_signal_ids", "target", "patch", "risk", "status",
+            "id", "timestamp", "method_fingerprint", "trigger", "evidence_global_signal_ids",
+            "target", "patch", "risk", "status", "placement",
         ],
-        "adopted-global-edits.jsonl": ["id", "timestamp"],
-        "rejected-global-proposals.jsonl": ["id", "timestamp", "proposal_id", "method_fingerprint", "reason"],
+        "adopted-global-edits.jsonl": ["id", "timestamp", "proposal_id", "applied_target", "edit_summary", "placement"],
+        "rejected-global-proposals.jsonl": ["id", "timestamp", "proposal_id", "method_fingerprint", "reason", "cooldown_signal_remaining"],
     }
 
     global_signal_ids: set[str] = set()
@@ -3440,30 +3263,39 @@ def _validate_global_runtime(args: argparse.Namespace, errors: list[str]) -> Non
                         errors.append(f"{path}:{index}: strength must be 1..3")
                 except (TypeError, ValueError):
                     errors.append(f"{path}:{index}: invalid strength")
-                if record.get("status") not in {"active", "compacted"}:
+                if record.get("status") != "active":
                     errors.append(f"{path}:{index}: invalid status: {record.get('status')!r}")
                 for field in SIGNAL_CARD_FIELDS + ["method_signature"]:
                     if field in record and not isinstance(record.get(field), str):
                         errors.append(f"{path}:{index}: {field} must be a string")
                 if "confidence" in record:
-                    try:
-                        confidence = float(record.get("confidence"))
-                        if confidence < 0 or confidence > 1:
-                            errors.append(f"{path}:{index}: confidence must be 0..1")
-                    except (TypeError, ValueError):
-                        errors.append(f"{path}:{index}: invalid confidence")
+                    errors.append(f"{path}:{index}: removed field 'confidence'")
             if filename == "global-proposals.jsonl":
                 if record.get("method_fingerprint") not in cluster_keys:
                     errors.append(f"{path}:{index}: proposal references missing method_fingerprint")
-                if record.get("decision") not in PROPOSAL_DECISIONS:
-                    errors.append(f"{path}:{index}: invalid decision: {record.get('decision')!r}")
-                if "placement" in record and record.get("placement") not in PROPOSAL_PLACEMENTS:
+                if "decision" in record:
+                    errors.append(f"{path}:{index}: removed field 'decision'")
+                if record.get("placement") not in GLOBAL_PROPOSAL_PLACEMENTS:
                     errors.append(f"{path}:{index}: invalid placement: {record.get('placement')!r}")
                 if record.get("status") not in PROPOSAL_STATUSES:
                     errors.append(f"{path}:{index}: invalid proposal status: {record.get('status')!r}")
+                if record.get("status") in {"pending_user_gate", "needs_revision"}:
+                    if not str(record.get("target", "")).strip() or str(record.get("target", "")).startswith("["):
+                        errors.append(f"{path}:{index}: target must be concrete")
+                    if not re.search(r"(?m)^#{1,6}\s+\S", str(record.get("patch", ""))):
+                        errors.append(f"{path}:{index}: patch must be a complete Markdown block")
+                    if not str(record.get("risk", "")).strip() or str(record.get("risk", "")).startswith("["):
+                        errors.append(f"{path}:{index}: risk must be concrete")
+                    if record.get("placement") == "skill_patch" and (
+                        not record.get("recommended_skill") or not record.get("recommended_skill_path")
+                    ):
+                        errors.append(f"{path}:{index}: skill_patch requires recommended Skill and path")
                 for sid in record.get("evidence_global_signal_ids", []):
                     if sid not in global_signal_ids:
                         errors.append(f"{path}:{index}: proposal references missing global signal id: {sid}")
+            for removed_field in ["cooldown_until", "applied_path", "write_status", "target_skill"]:
+                if removed_field in record:
+                    errors.append(f"{path}:{index}: removed field '{removed_field}'")
 
     _validate_global_clusters(args, global_signal_ids, errors)
     _validate_project_index(args, errors)
@@ -3477,6 +3309,8 @@ def _validate_global_clusters(args: argparse.Namespace, global_signal_ids: set[s
         errors.append(f"{path}: invalid JSON: {exc}")
         return
     clusters = state.get("clusters")
+    if state.get("schema_version") != "2.0":
+        errors.append(f"{path}: schema_version must be 2.0")
     if not isinstance(clusters, dict):
         errors.append(f"{path}: clusters must be object")
         return
@@ -3493,6 +3327,8 @@ def _validate_global_clusters(args: argparse.Namespace, global_signal_ids: set[s
             errors.append(f"{path}:{fingerprint}: invalid operator")
         if cluster.get("status") not in CLUSTER_STATUSES:
             errors.append(f"{path}:{fingerprint}: invalid status")
+        if "cooldown_until" in cluster:
+            errors.append(f"{path}:{fingerprint}: removed field 'cooldown_until'")
         if not isinstance(cluster.get("project_hashes", []), list):
             errors.append(f"{path}:{fingerprint}: project_hashes must be list")
         for sid in cluster.get("sample_global_signal_ids", []):
@@ -3508,6 +3344,8 @@ def _validate_project_index(args: argparse.Namespace, errors: list[str]) -> None
         errors.append(f"{path}: invalid JSON: {exc}")
         return
     projects = state.get("projects")
+    if state.get("schema_version") != "2.0":
+        errors.append(f"{path}: schema_version must be 2.0")
     if not isinstance(projects, dict):
         errors.append(f"{path}: projects must be object")
         return
@@ -3527,6 +3365,8 @@ def _validate_cluster_state(args: argparse.Namespace, signal_ids: set[str], erro
         errors.append(f"{path}: invalid JSON: {exc}")
         return
     clusters = state.get("clusters")
+    if state.get("schema_version") != "3.0":
+        errors.append(f"{path}: schema_version must be 3.0")
     if not isinstance(clusters, dict):
         errors.append(f"{path}: clusters must be object")
         return
@@ -3540,6 +3380,8 @@ def _validate_cluster_state(args: argparse.Namespace, signal_ids: set[str], erro
             errors.append(f"{path}:{key}: invalid operator")
         if cluster.get("status") not in CLUSTER_STATUSES:
             errors.append(f"{path}:{key}: invalid status")
+        if "cooldown_until" in cluster:
+            errors.append(f"{path}:{key}: removed field 'cooldown_until'")
         for sid in cluster.get("sample_signal_ids", []):
             if sid not in signal_ids:
                 errors.append(f"{path}:{key}: sample_signal_ids references missing signal id: {sid}")
@@ -3549,48 +3391,13 @@ def _validate_state(args: argparse.Namespace, errors: list[str]) -> None:
     sp = state_path(args)
     try:
         state = read_state(args)
+        if state.get("schema_version") != "3.0":
+            errors.append(f"{sp}: schema_version must be 3.0")
         for field in ["schema_version", "total_signal_count", "adopted_edit_count", "rejected_proposal_count", "updated_at"]:
             if field not in state:
                 errors.append(f"{sp}: missing field '{field}'")
     except Exception as exc:
         errors.append(f"{sp}: invalid JSON: {exc}")
-
-
-def _validate_four_gates(record: dict, path: Path, index: int, errors: list[str]) -> None:
-    gates = record.get("four_gates")
-    if gates is None:
-        return
-    for gate in ["abstraction", "transfer", "intelligence", "compression"]:
-        value = gates.get(gate) if isinstance(gates, dict) else None
-        if not isinstance(value, dict) or "passed" not in value or not value.get("reason"):
-            errors.append(f"{path}:{index}: invalid four_gates.{gate}")
-
-
-def _validate_score_evidence(record: dict, path: Path, index: int, errors: list[str]) -> None:
-    score = record.get("intelligence_score")
-    if not isinstance(score, dict):
-        return
-    evidence = record.get("score_evidence", {})
-    counter = record.get("counter_evidence", {})
-    if not isinstance(evidence, dict):
-        errors.append(f"{path}:{index}: score_evidence must be object")
-        return
-    if counter and not isinstance(counter, dict):
-        errors.append(f"{path}:{index}: counter_evidence must be object")
-        return
-    for key in SCORE_KEYS:
-        try:
-            value = int(score.get(key, 0))
-        except (TypeError, ValueError):
-            errors.append(f"{path}:{index}: invalid intelligence_score.{key}")
-            continue
-        if value > 0 and not evidence.get(key):
-            errors.append(f"{path}:{index}: missing score_evidence.{key} (non-zero score requires evidence)")
-        if value == 2 and not counter.get(key):
-            errors.append(f"{path}:{index}: missing counter_evidence.{key} (2-point score requires counter evidence)")
-    expected = sum(int(score.get(key, 0)) for key in SCORE_KEYS)
-    if int(score.get("total", expected)) != expected:
-        errors.append(f"{path}:{index}: intelligence_score.total mismatch")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -3647,20 +3454,6 @@ def build_parser() -> argparse.ArgumentParser:
     classify_parser.add_argument("--json", action="store_true", help="Emit machine-readable result")
     classify_parser.set_defaults(func=command_classify_input)
 
-    wake_parser = subparsers.add_parser("wake-check", help="Legacy read-only check; primary trigger path uses classify-input")
-    wake_parser.add_argument("--text", default="", help="User message to classify. Defaults to stdin.")
-    wake_parser.add_argument("--json", action="store_true", help="Emit machine-readable routing result")
-    wake_parser.add_argument("--exit-code", action="store_true", help="Exit 0 when routed, 1 when skipped.")
-    wake_parser.set_defaults(func=command_wake_check)
-
-    hook_prompt_parser = subparsers.add_parser(
-        "hook-user-prompt-submit",
-        help="Legacy UserPromptSubmit adapter; primary trigger path uses codex-user-prompt-submit",
-    )
-    hook_prompt_parser.add_argument("--text", default="", help="Prompt text for tests. Defaults to stdin JSON.")
-    hook_prompt_parser.add_argument("--pretty", action="store_true", help="Pretty-print hook JSON output.")
-    hook_prompt_parser.set_defaults(func=command_hook_user_prompt_submit)
-
     codex_prompt_parser = subparsers.add_parser(
         "codex-user-prompt-submit",
         help="Codex UserPromptSubmit trigger gate: local correction classifier only",
@@ -3678,15 +3471,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     codex_stop_parser = subparsers.add_parser(
         "codex-stop",
-        help="Codex Stop trigger gate: parse lightweight output-state tail",
+        help="Codex Stop trigger gate: fixed eight-turn periodic check",
     )
     codex_stop_parser.add_argument("--pretty", action="store_true", help="Pretty-print hook JSON output.")
     codex_stop_parser.set_defaults(func=command_codex_stop)
-
-    output_state_parser = subparsers.add_parser("parse-output-state", help="Parse and strip a lightweight output-state tail")
-    output_state_parser.add_argument("--text", default="", help="Assistant output text. Defaults to stdin.")
-    output_state_parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
-    output_state_parser.set_defaults(func=command_parse_output_state)
 
     guard_parser = subparsers.add_parser("guard", help="Run the jinhua invocation guard")
     guard_parser.add_argument("--session-id", default="")
@@ -3711,7 +3499,6 @@ def build_parser() -> argparse.ArgumentParser:
     signal_parser.add_argument("--transfer-conditions", default="", help="Where this method transfers across tasks/projects")
     signal_parser.add_argument("--negative-cases", default="", help="When this method should not be used")
     signal_parser.add_argument("--verification-path", default="", help="How the method should be checked")
-    signal_parser.add_argument("--confidence", type=float, default=None, help="Optional 0..1 model confidence for ranking only")
     signal_parser.add_argument("--immediate", action="store_true")
     signal_parser.add_argument("--auto-init", action="store_true", help="Create runtime state first if it is missing")
     signal_parser.set_defaults(func=command_log_signal)
@@ -3720,36 +3507,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     propose_parser = subparsers.add_parser("propose", help="Create a user-gated evolution proposal for a ready cluster")
     propose_parser.add_argument("--cluster-key", required=True)
-    propose_parser.add_argument("--decision", default="proposed_edit", choices=sorted(PROPOSAL_DECISIONS))
     propose_parser.add_argument("--placement", default="", choices=sorted(PROPOSAL_PLACEMENTS))
     propose_parser.add_argument("--placement-reason", default="")
     propose_parser.add_argument("--recommended-skill", default="")
     propose_parser.add_argument("--recommended-skill-path", default="")
-    propose_parser.add_argument("--target", default="")
-    propose_parser.add_argument("--patch", default="")
-    propose_parser.add_argument("--risk", default="")
-    propose_parser.add_argument("--force", action="store_true")
+    propose_parser.add_argument("--target", required=True)
+    propose_parser.add_argument("--patch", required=True)
+    propose_parser.add_argument("--risk", required=True)
     propose_parser.set_defaults(func=command_propose)
 
-    apply_parser = subparsers.add_parser("apply-proposal", help="Apply or record an accepted proposal after user says yes")
+    apply_parser = subparsers.add_parser("apply-proposal", help="Record an accepted proposal after the agent edits and verifies the target")
     apply_parser.add_argument("--proposal-id", required=True)
-    apply_parser.add_argument("--target-skill", default="")
-    apply_parser.add_argument("--summary", default="")
-    apply_parser.add_argument("--placement", default="", choices=sorted(PROPOSAL_PLACEMENTS))
+    apply_parser.add_argument("--placement", required=True, choices=sorted(PROPOSAL_PLACEMENTS))
+    apply_parser.add_argument("--applied-target", required=True)
+    apply_parser.add_argument("--summary", required=True)
     apply_parser.add_argument("--placement-reason", default="")
-    apply_parser.add_argument("--target-skill-path", default="")
-    apply_parser.add_argument("--patch", default="")
-    apply_parser.add_argument("--insert-after", default="", help="Insert patch after this exact marker instead of appending")
-    apply_parser.add_argument("--force", action="store_true")
     apply_parser.set_defaults(func=command_apply_proposal)
 
     reject_parser = subparsers.add_parser("reject-proposal", help="Reject a proposal or mark it for revision")
     reject_parser.add_argument("--proposal-id", required=True)
     reject_parser.add_argument("--reason", required=True)
     reject_parser.add_argument("--revision", action="store_true", help="Treat reason as user revision feedback")
-    reject_parser.add_argument("--cooldown-days", type=int, default=COOLDOWN_DAYS)
-    reject_parser.add_argument("--cooldown-signals", type=int, default=COOLDOWN_SIGNAL_LIMIT)
-    reject_parser.add_argument("--force", action="store_true")
     reject_parser.set_defaults(func=command_reject_proposal)
 
     global_propose_parser = subparsers.add_parser(
@@ -3757,51 +3535,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Create a user-gated proposal for a ready cross-project method cluster",
     )
     global_propose_parser.add_argument("--method-fingerprint", required=True)
-    global_propose_parser.add_argument("--decision", default="proposed_edit", choices=sorted(PROPOSAL_DECISIONS))
-    global_propose_parser.add_argument("--placement", default="", choices=sorted(PROPOSAL_PLACEMENTS))
+    global_propose_parser.add_argument("--placement", default="", choices=sorted(GLOBAL_PROPOSAL_PLACEMENTS))
     global_propose_parser.add_argument("--placement-reason", default="")
     global_propose_parser.add_argument("--recommended-skill", default="")
     global_propose_parser.add_argument("--recommended-skill-path", default="")
-    global_propose_parser.add_argument("--target", default="")
-    global_propose_parser.add_argument("--patch", default="")
-    global_propose_parser.add_argument("--risk", default="")
-    global_propose_parser.add_argument("--force", action="store_true")
+    global_propose_parser.add_argument("--target", required=True)
+    global_propose_parser.add_argument("--patch", required=True)
+    global_propose_parser.add_argument("--risk", required=True)
     global_propose_parser.set_defaults(func=command_global_propose)
 
-    merge_parser = subparsers.add_parser(
-        "global-merge-suggestions",
-        help="Suggest similar global method clusters without modifying data",
-    )
-    merge_parser.add_argument("--min-similarity", type=float, default=0.45)
-    merge_parser.add_argument("--limit", type=int, default=10)
-    merge_parser.add_argument("--json", action="store_true", help="Emit machine-readable suggestions")
-    merge_parser.set_defaults(func=command_global_merge_suggestions)
-
-    global_apply_parser = subparsers.add_parser("global-apply", help="Apply or record an accepted global proposal")
+    global_apply_parser = subparsers.add_parser("global-apply", help="Record an accepted global proposal after the agent edits and verifies the target")
     global_apply_parser.add_argument("--proposal-id", required=True)
-    global_apply_parser.add_argument("--target-skill", default="")
-    global_apply_parser.add_argument("--summary", default="")
-    global_apply_parser.add_argument("--placement", default="", choices=sorted(PROPOSAL_PLACEMENTS))
+    global_apply_parser.add_argument("--placement", required=True, choices=sorted(GLOBAL_PROPOSAL_PLACEMENTS))
+    global_apply_parser.add_argument("--applied-target", required=True)
+    global_apply_parser.add_argument("--summary", required=True)
     global_apply_parser.add_argument("--placement-reason", default="")
-    global_apply_parser.add_argument("--target-skill-path", default="")
-    global_apply_parser.add_argument("--patch", default="")
-    global_apply_parser.add_argument("--insert-after", default="", help="Insert patch after this exact marker instead of appending")
-    global_apply_parser.add_argument("--force", action="store_true")
     global_apply_parser.set_defaults(func=command_global_apply)
 
     global_reject_parser = subparsers.add_parser("global-reject", help="Reject a global proposal or mark it for revision")
     global_reject_parser.add_argument("--proposal-id", required=True)
     global_reject_parser.add_argument("--reason", required=True)
     global_reject_parser.add_argument("--revision", action="store_true", help="Treat reason as user revision feedback")
-    global_reject_parser.add_argument("--cooldown-days", type=int, default=COOLDOWN_DAYS)
-    global_reject_parser.add_argument("--cooldown-signals", type=int, default=COOLDOWN_SIGNAL_LIMIT)
-    global_reject_parser.add_argument("--force", action="store_true")
     global_reject_parser.set_defaults(func=command_global_reject)
-
-    compact_parser = subparsers.add_parser("compact", help="Compact raw signals while preserving cluster summaries")
-    compact_parser.add_argument("--keep-strength-at-least", type=int, default=3)
-    compact_parser.add_argument("--dry-run", action="store_true")
-    compact_parser.set_defaults(func=command_compact)
 
     subparsers.add_parser("status", help="Print runtime state").set_defaults(func=command_status)
     subparsers.add_parser("global-status", help="Print global promotion state").set_defaults(func=command_global_status)

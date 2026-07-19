@@ -1,8 +1,8 @@
 # CLI 使用说明
 
-> 英文参考见 [../cli-usage.md](../cli-usage.md)；本文件用中文解释怎么运行这些命令。
+> 英文辅助版本见 [../cli-usage.md](../cli-usage.md)。
 
-CLI 是确定性的账本工具。它只负责写入、聚类、导入、压缩和验证数据；“某条经验是否值得沉淀”由模型判断，最后由用户确认。
+全局参数必须写在子命令之前。
 
 ## 自动检查点
 
@@ -10,203 +10,150 @@ CLI 是确定性的账本工具。它只负责写入、聚类、导入、压缩�
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 ```
 
-`cycle` 是最常用的入口。它会：
+`cycle` 会初始化或迁移本地运行态、汇总本地状态、把压缩后的有效信号导入全局层，并显示待确认门或就绪提案骨架。
 
-- 创建缺失的运行态文件。
-- 汇总当前项目里的信号和聚类。
-- 把活跃本地信号导入全局晋升层。
-- 提示是否有待确认提案。
-- 为已经成熟的聚类打印提案骨架，包括建议落点（`placement_hint`）。如果建议落点是 `skill_patch`，还会尽量给出具体本地 Skill 和路径；如果建议落点是 `project_rule`，会给出 `recommended_project_rule_file`。
+常用选项：
 
-`--json` 会输出机器可读结果。如果 hook 需要把待确认提案当成硬信号，可以加 `--fail-on-pending-gate`；存在本地或全局待确认提案时，命令会用退出码 `2` 结束。`--no-global` 只建议在测试或调试时使用。
-
-`--agent-profile` 或环境变量 `JINHUA_AGENT_PROFILE` 可以影响项目规则文件推荐。支持 `codex`、`claude`、`copilot`、`trae`、`hermes`、`openclaw`、`workbuddy`，未知 agent 会走 generic/custom 兜底。
+- `--json`：机器可读输出。
+- `--fail-on-pending-gate`：存在本地或全局待确认门时退出码为 `2`。
+- `--no-global`：测试或排错时跳过全局导入。
+- `--project-id <stable-key>`：同一工作区包含无关项目或对话时提供稳定身份；只保存哈希。
 
 ## 触发层命令
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py classify-input --text "<latest user message>" --json
+python <jinhua-dir>/scripts/jinhua.py classify-input --text "你理解错了工作流" --json
+python <jinhua-dir>/scripts/jinhua.py codex-user-prompt-submit
+python <jinhua-dir>/scripts/jinhua.py codex-post-tool-use
+python <jinhua-dir>/scripts/jinhua.py codex-stop
 ```
 
-`classify-input` 是新的只读输入侧闸门。它只返回 `none`、`possible_user_correction` 或 `strong_user_correction`，不会运行 `cycle`，不会记录信号，不保存用户原文，也不会创建提案。
+- `classify-input` 返回 `none`、`possible_user_correction` 或 `strong_user_correction`。
+- `codex-user-prompt-submit` 在本地分类、统计不同用户回合，并按需注入极短纠错/就绪提醒。
+- `codex-post-tool-use` 记录本轮已经进入 Jinhua，防止重复。
+- `codex-stop` 只负责固定每 8 轮的周期检查；`stop_hook_active` 为真时始终放行。
 
-Codex hook 会调用：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-user-prompt-submit
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-post-tool-use
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-stop
-```
-
-辅助只读命令：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py parse-output-state --text "<assistant output>" --pretty
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> guard --session-id s --turn-id t --source manual --reason "..." --mark
-```
-
-`codex-user-prompt-submit` 从 stdin 读取 hook JSON，命中时只注入极短 `additionalContext`。它还会只读检查已有就绪聚类和待确认门，让未处理的 jinhua 工作进入下一轮提示词。`codex-post-tool-use` 记录本轮已经进入过 jinhua，防止重复。`codex-stop` 解析输出状态尾巴，需要时先查 invocation guard，再返回一次合法的 `decision: block` 原因；`stop_hook_active = true` 时直接放行。它们都不会写 `signals.jsonl`，不会创建提案，也不会绕过用户确认门。
-
-旧兼容命令仍可用，但不再是主路径：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py wake-check --text "<latest user message>" --json
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> hook-user-prompt-submit
-```
-
-## 项目身份
-
-全局晋升层需要判断“这条经验是不是跨项目重复出现”。默认身份规则是：
-
-1. 优先使用 git remote。
-2. 没有 git remote 时，使用项目根目录路径。
-
-如果一个工作区里混有多个不相关项目或多段对话，请显式传入身份：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> --project-id <stable-project-or-conversation-key> cycle
-```
-
-也可以设置环境变量 `JINHUA_PROJECT_ID`。显式身份会先哈希再写入全局层，明文不会保存。
+Hook 不迁移核心数据，不写 signals/proposals，也不修改文件。
 
 ## 记录信号
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> log-signal \
   --source-type user_correction \
-  --summary "Read README and relevant source before recommending reusable GitHub projects" \
+  --summary "推荐项目前先读取 README 和相关源码" \
   --operator verification_path \
-  --cluster-key verification_path:read_readme_and_source_before_recommending_projects \
-  --context "researching reusable tools" \
+  --cluster-key verification_path:verify_projects_before_recommending \
+  --context "评估是否采用外部项目" \
   --strength 2 \
-  --trigger "recommending external projects for adoption" \
-  --action "verify README and relevant source before recommending" \
-  --transfer-conditions "tool, library, Skill, or agent project recommendations" \
-  --negative-cases "quick pointers where the user did not ask for adoption judgment" \
-  --verification-path "cite README and source files used" \
-  --confidence 0.8 \
+  --trigger "准备推荐外部项目供用户采用" \
+  --action "推荐前读取 README 和相关源码" \
+  --transfer-conditions "Skill、库、工具或 agent 项目推荐" \
+  --negative-cases "只需要快速列出名称" \
+  --verification-path "引用读过的 README 和源码" \
   --auto-init
 ```
 
-必填参数：
+来源类型、摘要、operator、cluster key 和上下文是必填项。强度默认是 `1`；明确纠正、重复模式或高成本失败应显式传入对应强度。方法卡字段能改善迁移判断和全局指纹。
 
-- `--source-type`：信号来源。
-- `--summary`：脱敏后的方法论摘要。
-- `--operator`：方法类型。
-- `--cluster-key`：本地聚类键。
-- `--context`：任务上下文。
-- `--strength`：信号强度。
+`--immediate` 只用于用户明确要求立即沉淀，或紧急且可复用的高成本失败。它是唯一允许跳过普通就绪阈值的入口。
 
-建议补齐的信号卡字段：
-
-- `--trigger`：什么时候用。
-- `--action`：核心动作。
-- `--transfer-conditions`：适合迁移到哪里。
-- `--negative-cases`：什么时候不要用。
-- `--verification-path`：怎么验证。
-- `--confidence`：辅助排序分。
-
-这些字段越清楚，跨项目合并越不容易把不同经验混在一起。参数含义见 [glossary.md](glossary.md)。
-
-## 本地提案
+## 创建本地提案
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
-  --cluster-key <cluster-key> \
-  --decision proposed_edit \
-  --placement <project_rule|skill_patch|personal_global_skill> \
-  --target "<target Skill / file / insertion location>" \
-  --patch "## <简短规则标题>
+  --cluster-key verification_path:verify_projects_before_recommending \
+  --placement skill_patch \
+  --recommended-skill github-project-due-diligence \
+  --recommended-skill-path "<skill-dir>/SKILL.md" \
+  --target "<skill-dir>/SKILL.md / 来源验证" \
+  --patch "## 来源验证
 
-<完整 Markdown 规则块。>" \
-  --risk "<main side effect>"
+推荐供用户采用的项目之前，先读取 README 和相关源码。" \
+  --risk "对只需要名称的快速查询可能增加工作量。"
 ```
 
-`--placement` 可以不传；不传时使用 `cycle` 骨架里的建议落点。
+具体 `target`、带标题的完整 Markdown `patch` 和 `risk` 都是必填项。`placement` 可以省略并使用骨架推荐。`skill_patch` 必须有具体 Skill 名称和路径；`project_rule` 必须有规则文件建议。
 
-- `project_rule`：当前项目规则。适合本项目反复需要、但还没有跨项目证据的经验。
-- `skill_patch`：增强已有本地 Skill。jinhua 会推荐最合适的具体 Skill 和路径；只有要覆盖推荐时，才需要手动传 `--recommended-skill` 或 `--recommended-skill-path`。
-- `personal_global_skill`：个人全局 Skill 或所有项目规则。
+提案创建后进入 `pending_user_gate`，继续前必须展示本地化用户确认门。
 
-如果是 `project_rule`，jinhua 会推荐项目规则文件，但不会自动创建。推荐顺序会优先考虑当前项目里已经存在的规则文件。
+## 采纳、修订或拒绝
 
-用户确认后记录结果：
+用户采纳后，先用宿主原生工具修改并验证目标，再记录：
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal --proposal-id <id> --placement <chosen-placement>
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal --proposal-id <id> --reason "..."
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal --proposal-id <id> --reason "..." --revision
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal \
+  --proposal-id <proposal-id> \
+  --placement skill_patch \
+  --applied-target "<skill-dir>/SKILL.md" \
+  --summary "已加入来源验证规则并核对差异。"
 ```
 
-`--revision` 表示用户不是彻底拒绝，而是要求修改后再看。
+apply 命令不会写目标文件。
+
+用户如果改选另一种落点，必须先修订提案，使所有者和目标信息与新落点一致，再记录采纳。
+
+```bash
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal \
+  --proposal-id <proposal-id> \
+  --reason "范围太宽"
+
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal \
+  --proposal-id <proposal-id> \
+  --reason "仅限采用型推荐" \
+  --revision
+```
+
+修订会保留确认门。拒绝后需要 5 条新的同类信号才解除冷却。
 
 ## 全局晋升
 
-普通 `cycle` 已经会把活跃本地信号导入 `global-data/`。
-
-手动查看全局状态：
+普通 `cycle` 已经会导入本地信号。手动查看：
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-status
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-cycle
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-status
 ```
 
-创建全局提案：
+创建全局提案时同样必须提供目标、完整 patch 和风险：
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-propose \
   --method-fingerprint <fingerprint> \
-  --decision proposed_edit \
-  --placement <skill_patch|personal_global_skill> \
-  --target "<target Skill / file / insertion location>" \
-  --patch "## <简短规则标题>
+  --placement personal_global_skill \
+  --target "~/.codex/skills/<skill-name>/SKILL.md" \
+  --patch "## 可复用规则
 
-<完整 Markdown 规则块。>" \
-  --risk "<main side effect>"
+应用已经验证的跨项目方法。" \
+  --risk "约束不同的项目可能不适用。"
 ```
 
-全局提案通常只在两个落点里选：有合适的已有本地 Skill，就用 `skill_patch`；没有清晰归属，才考虑 `personal_global_skill`。同项目内反复出现的经验，先走本地提案，不用等跨项目证据。
+原生编辑和验证完成后，用 `global-apply` 记录 `proposal-id`、placement、实际目标和摘要。拒绝或修订使用 `global-reject [--revision]`。
 
-只读查看可能重复的全局方法：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> global-merge-suggestions
-```
-
-这个命令只给合并建议，不会改数据。
-
-## 维护命令
+## 状态和验证
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> list-clusters
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> status
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> compact --dry-run
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> list-clusters
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
+python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> guard --session-id s --turn-id t
 ```
 
-- `list-clusters`：看本地有哪些聚类。
-- `status`：看本地统计。
-- `compact --dry-run`：预览压缩会删掉哪些低价值信号。
-- `validate`：检查 JSON/JSONL 数据结构和引用关系。
+`validate` 会先迁移旧运行态，再检查当前 schema 和废弃字段边界。
 
 ## 运行态文件
 
-项目本地：
-
 ```text
-.jinhua/data/
-├── signals.jsonl
-├── cluster-state.json
-├── proposals.jsonl
-├── adopted-edits.jsonl
-├── rejected-proposals.jsonl
-├── crystallized-operators.jsonl
-└── evolution-state.json
-```
+<project-root>/.jinhua/
+├── data/
+│   ├── signals.jsonl
+│   ├── cluster-state.json
+│   ├── proposals.jsonl
+│   ├── adopted-edits.jsonl
+│   ├── rejected-proposals.jsonl
+│   └── evolution-state.json
+└── runtime/
+    └── invocation-guard.json
 
-全局：
-
-```text
 <jinhua-dir>/global-data/
 ├── global-signals.jsonl
 ├── global-clusters.json
@@ -216,3 +163,5 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
 ├── project-index.json
 └── global-state.json
 ```
+
+字段和迁移规则见 [runtime-schema.md](runtime-schema.md)。

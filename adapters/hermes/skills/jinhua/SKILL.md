@@ -16,7 +16,8 @@ python "$JINHUA_ROOT/scripts/jinhua.py" --project-root "$PWD" cycle
 Then follow:
 
 ```text
-cycle -> log-signal -> cycle -> propose/global-propose -> user gate -> apply/reject -> cycle -> validate
+cycle -> log-signal -> cycle -> propose/global-propose -> user gate
+      -> host-native edit and verification -> apply/reject record -> cycle -> validate
 ```
 
-Do not create another memory ledger. Do not bypass the user gate.
+Do not create another memory ledger. Do not bypass the user gate. Apply commands are ledger-only.

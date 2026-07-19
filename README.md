@@ -1,300 +1,248 @@
-# jinhua
+# Jinhua
 
 语言：简体中文 | [English](README.en.md)
 
-`jinhua` 是给 Codex、Claude Code 等支持 Skill 的编程智能体（Agent）使用的本地工具。它做一件事：把你在真实项目里反复纠正、反复验证出来的“工作方法”，整理成可以复用、可以进化的 Skill 规则。
+Jinhua 是一个面向编程智能体（Agent）的本地方法经验沉淀工具。它把真实任务中反复纠正、验证或成功复用的方法，整理为经过用户确认的项目规则或 Skill 改进。
 
-它不会把每次聊天都记下来，也不会偷偷改 Skill。它只记录脱敏后的方法论信号；只有证据足够强、能写成明确提案时，才请用户做一次确认。
+它不是聊天记录、个人记忆库或自动改写器。Jinhua 只保存脱敏后的方法论证据；Hook 不会自动写经验，任何规则修改都必须经过用户确认。
 
-确认入口现在是“带落点的确认”：
+产品形态：
 
-```text
-项目规则(project_rule) / 增强已有 Skill(skill_patch) / 个人全局 Skill(personal_global_skill) / 拒绝(No) / 修订(Revision)
-```
+- Codex：插件（plugin）+ 三道本地触发闸门 + Skill + CLI。
+- Claude Code：原生 Hook 适配 + 同一套 Skill/CLI。
+- OpenClaw、Hermes、TRAE、WorkBuddy：轻量宿主包装，核心闭环不变。
 
-- `项目规则(project_rule)`：作为当前项目的轻量规则采纳。
-- `增强已有 Skill(skill_patch)`：增强某个具体的已有本地 Skill。
-- `个人全局 Skill(personal_global_skill)`：做成个人全局 Skill，或面向所有项目生效的规则。
-- `拒绝(No)`：拒绝，并让这类提案暂时冷却。
-- `修订(Revision)`：先按你的意见修改，再重新确认。
+中文逻辑图：[docs/jinhua-logic.html](docs/jinhua-logic.html)
 
-中文运行逻辑图见：[docs/jinhua-logic.html](docs/jinhua-logic.html)。
-
-项目导航：智能体先读 [AGENTS.md](AGENTS.md)；结构和维护规则见 [PROJECT_RULES.md](PROJECT_RULES.md)；逐文件职责见 [PROJECT_INDEX.md](PROJECT_INDEX.md)。
-
-## 它解决什么
-
-很多智能体（Agent）用久了会遇到同一个问题：你反复教它某种做法，但这些经验很难稳定沉淀到 Skill 里。`jinhua` 的目标就是把这个过程做成闭环：
+## 完整闭环
 
 ```text
-cycle
--> log-signal
--> cycle
--> propose 或 global-propose
--> 用户确认
--> apply/reject
--> cycle
--> validate
+触发层发现可能值得检查的回合
+        ↓
+cycle：读取本地/全局状态，先显示待确认门
+        ↓
+写入门：能否压缩成可复用的 trigger + action？
+        ├─ 否 → 跳过，不写账本
+        └─ 是 → log-signal
+                    ↓
+              本地聚类与计数
+                    ↓
+        未就绪 → 继续积累，不打扰用户
+        已就绪 → propose / global-propose
+                    ↓
+              用户确认落点
+        ├─ 项目规则
+        ├─ 增强已有 Skill
+        ├─ 个人全局 Skill
+        ├─ 修订 → 重写提案后再次确认
+        └─ 拒绝 → 5 条新的同类信号后解除冷却
+                    ↓
+用户采纳：Agent 用宿主原生工具修改并验证目标
+                    ↓
+apply-proposal / global-apply 只记录已完成的采纳
+                    ↓
+cycle → validate
 ```
 
-这里的几个英文词是命令名，不能翻译：
-
-- `cycle`：跑一次自动检查。它会初始化运行态、统计本地信号、导入全局层，并提示下一步。
-- `log-signal`：记录一条可复用的方法论信号。
-- `propose`：为当前项目里的成熟信号创建提案。
-- `global-propose`：为跨项目重复出现的方法创建提案。
-- `apply/reject`：记录用户采纳或拒绝。
-- `validate`：检查运行态数据有没有坏。
-
-## 唤醒机制
-
-`jinhua` 不是后台服务，不会一直监听所有对话。它的核心闭环仍然从 `cycle` 开始；触发层只负责更稳定地发现“可能该进入 jinhua”的回合。
-
-Codex 插件主路径是三道闸门：
-
-- 第一道：`UserPromptSubmit` 本地判断用户是否在纠错，输出 `none` / `possible_user_correction` / `strong_user_correction`，只注入极短内部提示。
-- 第二道：agent 可以在当前轮直接调用 jinhua；`invocation guard` 只负责防止同一轮重复调用。
-- 第三道：`Stop` 解析极短输出状态尾巴，例如 `output_state: ok` 或 `output_state: jinhua_candidate`；需要检查时按 Codex 支持的 `decision: block + reason` 请求一次继续处理，先查 guard，不绕过原规则。
-
-第一道还会本地读取现有运行态。如果发现已经有 `就绪` 聚类或 `待确认门`，会把一句极短提醒写进下一轮上下文：先跑 `cycle`，再创建一个提案，或明确说明为什么跳过。这个检查只读本地 JSON/JSONL，不运行 `cycle`，不写信号，不生成提案。
-
-第三道还会按单个对话计数，每 8 轮做一次兜底检查，要求 agent 极短扫描本轮和过往对话是否出现可复用经验。普通回合不增加模型调用；只有周期到期或已有候选时，Stop hook 才请求一次继续处理，并在 `stop_hook_active` 回合放行防止循环。
-
-三道闸门都不会直接写 `log-signal`、不会生成 proposal、不会改 Skill、不会绕过用户确认门。Hook 的 stdout 严格使用 Codex 官方输出字段，不输出内部状态字段。
-
-Codex hook 配置在：
+核心数据流始终是：
 
 ```text
-hooks/codex-hooks.json
+signals -> clusters -> proposals -> user gate
 ```
 
-它调用：
+触发层不能绕过这条链路，也不能绕过用户确认门。
 
-```bash
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py"
-python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
+## 三道触发闸门
+
+### 第一道：输入侧本地判断
+
+`UserPromptSubmit` 在主模型处理前用本地 Python 规则判断用户是否在纠正工作流、验证标准、工具/Skill 选择或遗漏流程：
+
+```text
+none
+possible_user_correction
+strong_user_correction
 ```
 
-wrapper 会优先从 Hook payload（包括常见嵌套字段）解析项目根目录，再读取项目目录环境变量，最后才使用 Hook 进程当前目录。如果最后只能得到插件目录本身，Hook 会跳过运行态写入，避免把 `.jinhua` 写进安装目录。
+命中时只向当前正常模型调用加入一句短内部提示。它还会只读检查现有就绪聚类和待确认门，并按会话累计不同用户回合。它不运行 `cycle`，不迁移核心数据，不写 signals/proposals，也不保存用户原文。
 
-插件更新后，Codex 可能先把 Hook 标为 `modified` 或 `untrusted`。此时 Hook 已被发现但不会执行，必须先由 Codex 宿主信任当前 Hook 内容；这个信任状态属于宿主配置，不属于 Jinhua 经验账本。
+### 第二道：Agent 直接调用 + 调用保护门
 
-旧的 `wake-check` 和 `hook-user-prompt-submit` 仍保留为兼容命令，但不再是推荐主路径。
+用户明确要求沉淀，或 Agent 明确发现可迁移方法时，可以在当前轮直接进入 Jinhua，不必等待周期检查。
 
-当前仓库已经补齐了插件层文件：
+`PostToolUse` 只记录本轮是否已经调用 Jinhua，防止输入提醒、Agent 主动调用和周期提醒重复触发。保护门只有四种结果：
 
-- `.codex-plugin/plugin.json`
-- `.agents/plugins/marketplace.json`
-- `.claude-plugin/plugin.json`
-- `.claude-plugin/marketplace.json`
+```text
+allow
+already_handled
+skip_duplicate
+block_loop
+```
 
-这意味着 `jinhua` 不只是一个 Skill 仓库：Codex 可以通过插件层加载 hook；Claude Code 等其他支持 Skill/CLI 的 agent 仍可使用核心闭环，hook 需要按各自平台配置。
+### 第三道：每 8 轮周期回顾
 
-## 其他 Agent 适配
+`Stop` 按单个会话固定每 8 个不同用户回合触发一次极短回顾，要求 Agent 检查本轮及此前对话是否出现可复用方法。普通回合只运行本地脚本；周期到期时才请求一次额外模型继续。
 
-适配层都放在 `adapters/`，不改 jinhua 核心闭环，也不新增第二套经验系统。
+Stop 不再要求模型输出状态尾巴，也不解析候选状态。检测到 `stop_hook_active` 或本轮已经进入 Jinhua 时直接放行，避免循环和重复调用。
 
-| Agent | 适配方式 | 自动程度 |
-| --- | --- | --- |
-| Claude Code | `hooks/hooks.json` | 原生 plugin hook 适配，复用三道闸门 wrapper。 |
-| OpenClaw | `adapters/openclaw/openclaw.plugin.json` + Skill | 提供 OpenClaw plugin/Skill 包装。 |
-| Hermes | `adapters/hermes/skills/jinhua/SKILL.md` | Skill 适配。 |
-| TRAE | `adapters/trae/skills/jinhua/SKILL.md` | Skill 适配。 |
-| WorkBuddy | `adapters/workbuddy/skills/jinhua/SKILL.md` | Skill 适配。 |
+三道闸门只负责分类、计数、提醒和去重。它们不会自动写信号、创建提案或修改规则。
 
-其中 Claude Code 和 OpenClaw 有独立适配文件；Hermes、TRAE、WorkBuddy 走轻量 Skill 适配，是否自动 hook 取决于宿主自身是否支持对应配置。
+详细协议见 [references/zh-CN/hook-integration.md](references/zh-CN/hook-integration.md)。
 
-## 判断规则
+## 什么会被记录
 
-`jinhua` 只记录可复用的方法论信号。能记录的经验，至少要能写成未来的 `trigger`（什么时候用）和 `action`（怎么做）。
+一条经验必须同时具备：
 
-满足下面任一情况，才考虑记录：
+- `trigger`：未来什么情况下使用。
+- `action`：遇到这种情况具体怎么做。
 
-- 用户纠正了推理方向、验证标准或工作流程。
-- 同一个方法在当前项目里重复出现。
-- 某次失败已经修好，而且失败原因能迁移到以后。
-- 某次成功暴露出可复用的做法。
-- 用户明确要求记住、沉淀、写进 Skill，或所有项目都这样做。
+并且至少满足一项：
 
-下面这些不记录：
+- 用户纠正了工作流、推理方向、验证标准、Skill/工具选择或遗漏流程。
+- 同一项目反复出现相同的可复用方法。
+- 已修复失败暴露出可迁移原因。
+- 成功路径证明某种方法可以复用。
+- 用户明确要求记住、沉淀、写入 Skill 或应用到其他项目。
 
-- 一次性偏好。
-- 普通代码 bug。
-- 本地路径、临时命令、本地 API 细节。
-- 只对当前对话有用的经验。
+默认跳过：
 
-强度（`strength`）这样打分：
+- 一次性 bug 或事实修正。
+- 语气、长短、排版等普通输出偏好。
+- 私人事实、用户原文、凭证和敏感项目标识。
+- 本地路径、临时命令、局部 API 细节。
+- 只对当前对话有用、无法写成 `trigger + action` 的内容。
 
-- `1`：普通观察。
-- `2`：明确用户纠正，或同类模式重复出现。
-- `3`：高成本失败、反复返工，或用户明确要求沉淀。
+Agent 负责语义判断和抽象；CLI 只做确定性校验、存储、计数、聚类、迁移和确认结果记账。
 
-本地触发提案：
+## 强度与就绪
 
-- 同一聚类至少 3 条信号，或
-- 总强度至少 5，或
-- 用户明确要求现在沉淀，或
-- 出现可复用且紧急的高成本失败。
+`strength` 固定为：
 
-全局触发提案：
+- `1`：普通自我观察。
+- `2`：明确用户纠正或重复模式。
+- `3`：高成本失败、反复返工或明确沉淀要求。
 
-- 先归到同一个规范化方法指纹（`method_fingerprint`）。
-- 默认路径：3 个项目、5 条证据、总强度 7。
-- 快速路径：2 个项目、总强度 6，并且有强纠正或高强度证据。
+本地同类聚类满足任一条件即“就绪”：
 
-落点按这个顺序判断：
+```text
+信号数 >= 3
+或
+总强度 >= 5
+```
 
-1. `personal_global_skill`：用户要求所有项目生效、要求新建独立 Skill、方法本身是独立工作流，或全局证据已经足够。
-2. `skill_patch`：经验明显属于已有本地 Skill；jinhua 会推荐具体 Skill 和路径。
-3. `project_rule`：当前项目需要，但还不适合做成全局 Skill，也不适合改已有 Skill。
-4. 其他情况：不写入。
+`log-signal --immediate` 是唯一即时通道，只用于明确沉淀要求或紧急、可复用的高成本失败。
 
-如果落点是 `project_rule`，jinhua 会给出 `recommended_project_rule_file`。它优先推荐项目里已经存在的规则文件，也支持用 `--agent-profile` 或 `JINHUA_AGENT_PROFILE` 指定 `codex`、`claude`、`copilot`、`trae`、`hermes`、`openclaw`、`workbuddy`，未知 agent 会走 generic/custom 兜底。它只推荐，不会自动创建项目规则文件。
+“就绪”表示证据允许形成提案，不代表已经改规则。下一次输入侧 ready-attention 会把它带回 Agent 注意力，由 Agent 创建完整提案或给出具体跳过原因。
+
+## 跨项目归并
+
+`cycle` 会把本地有效信号压缩后导入个人全局层。全局层只保存哈希化项目身份和脱敏方法证据，不保存原始项目路径。
+
+同类方法优先由规范化的 `operator + action` 生成精确 `method_fingerprint`。CLI 不做模糊相似度自动合并；Agent 负责把语义相同的方法压缩成一致动作。
+
+普通全局就绪：
+
+```text
+3 个不同项目 + 5 条证据 + 总强度 7
+```
+
+快速路径：
+
+```text
+2 个不同项目 + 总强度 6
++ 至少 2 条高强度证据或用户纠正
+```
+
+## 三种落点与用户确认门
+
+按强特征优先、轻层兜底：
+
+1. `personal_global_skill`：明确要求所有项目生效、新建独立 Skill、方法本身是独立工作流，或已有成熟全局证据。
+2. `skill_patch`：经验明显属于已有 Skill。提案必须给出最合适的具体 Skill 和路径。
+3. `project_rule`：只证明当前项目需要，且没有明确 Skill 归属或全局范围。提案必须给出具体项目规则文件建议。
+
+正常分布应是：大部分不写入，项目规则较多，增强已有 Skill 较少，个人全局 Skill 最少。
+
+中文用户确认门：
+
+```text
+项目规则(project_rule)
+增强已有 Skill(skill_patch)
+个人全局 Skill(personal_global_skill)
+拒绝(No)
+修订(Revision)
+```
+
+提案必须包含具体目标、带标题的完整 Markdown 修改块、主要风险、证据、落点和落点理由。占位符不能进入用户确认门。
+
+用户如果改选另一种落点，Agent 先修订提案，使目标、所有者、修改块和风险与新落点一致，再执行修改。
+
+## 采纳是纯记账
+
+用户选择落点后：
+
+1. Agent 先用 Codex、Claude Code 等宿主的原生编辑工具修改目标。
+2. Agent 运行对应验证并确认修改成功。
+3. 成功后才调用 `apply-proposal` 或 `global-apply`，记录实际目标和修改摘要。
+
+CLI 不再内置 Markdown 写入器。修改或验证失败时，不得把提案记为已采纳。
 
 ## 快速开始
-
-先跑一次自动检查点（cycle）：
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 ```
 
-如果任务里出现了明确、可复用的方法论经验，再记录信号：
+记录一条已经通过筛选的信号：
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> log-signal \
   --source-type user_correction \
-  --summary "Read README and relevant source before recommending reusable GitHub projects" \
+  --summary "推荐可采用的外部项目之前先核对 README 和相关源码" \
   --operator verification_path \
-  --cluster-key verification_path:read_readme_and_source_before_recommending_projects \
-  --context "researching reusable tools" \
+  --cluster-key verification_path:verify_projects_before_recommending \
+  --context "评估外部项目是否值得采用" \
   --strength 2 \
-  --trigger "recommending external projects for adoption" \
-  --action "verify README and relevant source before recommending" \
-  --transfer-conditions "tool, library, Skill, or agent project recommendations" \
-  --negative-cases "quick pointers where the user did not ask for adoption judgment" \
-  --verification-path "cite README and source files used" \
-  --confidence 0.8 \
+  --trigger "准备推荐外部项目供用户采用" \
+  --action "推荐前读取 README 和相关源码" \
+  --transfer-conditions "Skill、库、工具或 Agent 项目推荐" \
+  --negative-cases "用户只需要快速列出名称" \
+  --verification-path "说明已读取的 README 和源码位置" \
   --auto-init
 ```
 
-这段命令里的英文参数是 CLI 接口名。常用参数可以这样理解：
+创建提案时，`--target`、`--patch` 和 `--risk` 都是必填项；`--patch` 必须是带标题的完整 Markdown 块。
 
-- `--source-type`：信号来源，比如用户纠正（user_correction）、成功经验（success_trace）或失败轨迹（failure_trace）。
-- `--summary`：脱敏后的经验摘要，不要写用户原文。
-- `--operator`：经验类型，例如验证路径（verification_path）。
-- `--cluster-key`：本地聚类键，格式必须是 `operator:short_method_slug`。
-- `--context`：这条经验出现在哪类任务里。
-- `--strength`：信号强度，`1` 普通，`2` 明确，`3` 高成本失败或强烈要求沉淀。
-- `--trigger`：什么时候应该使用这个方法。
-- `--action`：可迁移的核心动作；跨项目合并时优先看它。
-- `--transfer-conditions`：适合迁移到哪些场景。
-- `--negative-cases`：什么时候不要用。
-- `--verification-path`：怎么确认这个方法真的被执行了。
-- `--confidence`：0 到 1 的辅助排序分，不是最终裁判。
-
-完整术语表见 [references/zh-CN/glossary.md](references/zh-CN/glossary.md)。
-
-记录后再跑一次：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
-```
-
-## 创建和处理提案
-
-当某个本地聚类成熟后，可以创建提案：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
-  --cluster-key verification_path:read_readme_and_source_before_recommending_projects \
-  --decision proposed_edit \
-  --placement skill_patch \
-  --target "target-skill/SKILL.md / research workflow" \
-  --patch "## Source-Backed Recommendations
-
-When recommending reusable external projects for adoption, verify the README and relevant source before claiming usefulness." \
-  --risk "Can add work when the user only wants quick pointers."
-```
-
-落点分三层：
-
-- `project_rule`：轻量项目规则，适合只在当前项目反复出现的经验。
-- `skill_patch`：增强已有本地 Skill。jinhua 会推荐最合适的具体 Skill 和路径，不需要用户自己找。
-- `personal_global_skill`：个人全局 Skill 或所有项目规则，适合明确要跨项目生效的经验。
-
-用户选择某个落点后记录采纳：
+采纳后只记账：
 
 ```bash
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> apply-proposal \
-  --proposal-id <prop_id> \
+  --proposal-id <proposal-id> \
   --placement skill_patch \
-  --target-skill target-skill \
-  --target-skill-path "<target-skill-dir>/SKILL.md" \
-  --insert-after "## Use This When" \
-  --patch "## Source-Backed Recommendations
-
-When recommending reusable external projects for adoption, verify the README and relevant source before claiming usefulness." \
-  --summary "Added source-backed recommendation rule"
+  --applied-target "<skill-dir>/SKILL.md" \
+  --summary "已加入并验证来源核对规则"
 ```
 
-用户选择 `拒绝(No)` 后记录拒绝：
+完整参数和状态变化见 [references/zh-CN/cli-usage.md](references/zh-CN/cli-usage.md)。
 
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> reject-proposal \
-  --proposal-id <prop_id> \
-  --reason "Too broad"
-```
+## 数据与迁移
 
-最后验证数据：
-
-```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
-```
-
-## 常用命令
-
-- `cycle`：自动检查点。
-- `classify-input`：新触发层的本地纠错分类。
-- `codex-user-prompt-submit`：Codex 第一道输入侧 hook 入口。
-- `codex-post-tool-use`：Codex 第二道 invocation guard 入口。
-- `codex-stop`：Codex 第三道输出状态尾巴与继续检查入口。
-- `parse-output-state`：只读解析状态尾巴；不改写宿主已经生成的正文。
-- `guard`：手动检查 invocation guard。
-- `wake-check`：legacy 兼容粗筛，不再是主路径。
-- `hook-user-prompt-submit`：legacy 兼容适配器，不再是主路径。
-- `log-signal`：记录方法论信号。
-- `list-clusters`：查看本地聚类。
-- `propose`：创建本地提案。
-- `apply-proposal`：记录本地采纳。
-- `reject-proposal`：记录本地拒绝或修订。
-- `global-cycle`：手动查看全局晋升层。
-- `global-status`：查看全局状态。
-- `global-propose`：创建全局提案。
-- `global-merge-suggestions`：只读查看可能重复的全局方法。
-- `global-apply`：记录全局采纳。
-- `global-reject`：记录全局拒绝或修订。
-- `compact`：压缩低价值信号。
-- `status`：查看本地状态。
-- `validate`：验证 JSON/JSONL 数据。
-
-## 数据放在哪里
-
-项目本地运行态：
+项目本地：
 
 ```text
-.jinhua/data/
-├── signals.jsonl
-├── cluster-state.json
-├── proposals.jsonl
-├── adopted-edits.jsonl
-├── rejected-proposals.jsonl
-├── crystallized-operators.jsonl
-└── evolution-state.json
+<project-root>/.jinhua/
+├── data/
+│   ├── signals.jsonl
+│   ├── cluster-state.json
+│   ├── proposals.jsonl
+│   ├── adopted-edits.jsonl
+│   ├── rejected-proposals.jsonl
+│   └── evolution-state.json
+└── runtime/
+    └── invocation-guard.json
 ```
 
-跨项目晋升层：
+个人全局层：
 
 ```text
 <jinhua-dir>/global-data/
@@ -307,24 +255,42 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
 └── global-state.json
 ```
 
-安装后不需要用户额外配置。`cycle` 会在需要时创建这些文件。
+Jinhua 2.0 的本地 schema 是 `3.0`，全局 schema 是 `2.0`。第一次运行非 Hook 核心命令时自动迁移；迁移保留信号、证据、ID、提案状态和采纳结果，删除失效字段与 operator 晋升种子。所有信号永久保留，不再提供压缩删除命令。
 
-如果一个工作区里混有多个不相关项目或多段对话，请传入 `--project-id <stable-key>`，或设置 `JINHUA_PROJECT_ID`。这个值会先哈希再写入全局层，明文不会保存。
+迁移可重复执行且结果不变。JSON/JSONL 损坏时会在改写前中止。
 
-## 设计边界
+一个工作区混有多个无关项目或对话时，使用 `--project-id <stable-key>` 或 `JINHUA_PROJECT_ID` 区分；明文只用于生成哈希，不进入全局记录。
 
-`jinhua` 故意保持小：
+字段说明见 [references/zh-CN/runtime-schema.md](references/zh-CN/runtime-schema.md)，隐私边界见 [references/zh-CN/data-policy.md](references/zh-CN/data-policy.md)。
 
-- 不做后台进程（daemon）。
-- 不依赖外部数据库。
-- 不依赖向量库。
-- 不做仪表盘（dashboard）。
-- 不绕过用户确认。
+## 宿主适配
 
-## 许可证
+| 宿主 | 入口 | 能力 |
+| --- | --- | --- |
+| Codex | `.codex-plugin/plugin.json` + `hooks/codex-hooks.json` | 三道触发闸门、Skill、CLI |
+| Claude Code | `.claude-plugin/plugin.json` + `hooks/hooks.json` | 原生 Hook 适配、Skill、CLI |
+| OpenClaw | `adapters/openclaw/` | 插件/Skill 包装 |
+| Hermes | `adapters/hermes/` | Skill 包装 |
+| TRAE | `adapters/trae/` | Skill 包装 |
+| WorkBuddy | `adapters/workbuddy/` | Skill 包装 |
 
-MIT。
+除 Codex 和 Claude Code 外，其他包装是否自动触发取决于宿主对 Skill/Hook 的支持；它们不会改变 Jinhua 内核。
 
-## 贡献
+## Token 与注意力成本
 
-见 [CONTRIBUTING.md](CONTRIBUTING.md)、[SECURITY.md](SECURITY.md) 和 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。英文辅助文档见 [CONTRIBUTING.en.md](CONTRIBUTING.en.md)、[SECURITY.en.md](SECURITY.en.md) 和 [CODE_OF_CONDUCT.en.md](CODE_OF_CONDUCT.en.md)。
+- 第一道分类、ready-attention、回合计数和调用保护都在本地运行，不单独调用模型。
+- 普通回合不加载完整 Jinhua Skill，也不运行 `cycle`。
+- 固定每 8 轮最多请求一次短回顾；这是唯一周期性额外模型继续。
+- Skill 被真正选中后只加载精简后的 `SKILL.md`，详细文档按需读取。
+- 没有强制状态尾巴、后台 daemon、外部数据库或向量检索。
+
+## 开源与维护
+
+- 项目入口：[AGENTS.md](AGENTS.md)
+- 项目规范：[PROJECT_RULES.md](PROJECT_RULES.md)
+- 逐文件索引：[PROJECT_INDEX.md](PROJECT_INDEX.md)
+- 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 安全政策：[SECURITY.md](SECURITY.md)
+- 行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+
+许可证：MIT。

@@ -1,77 +1,87 @@
 # Maintenance Rules
 
-This project is a small Skill + single-file CLI. Keep it that way unless real usage proves otherwise.
+Jinhua is a compact Skill, a single-file standard-library CLI, and thin host trigger adapters. Keep that shape unless measured runtime evidence proves a split is necessary.
 
-For everyday navigation, read the short root files `AGENTS.md`, `PROJECT_RULES.md`, and `PROJECT_INDEX.md`. This reference is the detailed maintenance policy; update the root navigation files only when ownership, structure, or project rules actually change.
+For navigation, read `AGENTS.md`, then `PROJECT_RULES.md` and `PROJECT_INDEX.md` when ownership or structure matters.
 
-## File Rules
+## File Ownership
 
-- `SKILL.md` is the control plane, not a knowledge base.
-- `SKILL.zh-CN.md` is a Chinese explanation, not the active control plane.
-- `README.md` is the user-facing usage guide.
-- `README.md` is the default Chinese user-facing usage guide.
-- `README.en.md` is the English mirror.
-- `PROJECT_MAP.md` is the navigation map.
-- `PROJECT_INDEX.md` is the file-by-file navigation index.
-- `PROJECT_RULES.md` is the short project convention file.
-- `references/` must stay under 8 files.
-- Do not add a new reference file if an existing one can hold the content.
+- `SKILL.md`: active runtime control plane; keep it short.
+- `SKILL.zh-CN.md`: Chinese explanation, not the active control plane.
+- `scripts/jinhua.py`: only CLI and deterministic ledger implementation.
+- `hooks/codex-hooks.json` and `hooks/codex_*.py`: Codex trigger layer.
+- `hooks/hooks.json`: Claude Code adapter reusing the same wrappers.
+- `references/cli-usage.md`: command contract.
+- `references/data-policy.md`: recordability and privacy.
+- `references/runtime-schema.md`: current schemas and migration.
+- `references/hook-integration.md`: trigger and host protocols.
+- `adapters/`: host packaging only.
 
-## Localization Rules
+Do not add a reference when an existing topic file can hold the content.
 
-- Chinese public docs are the default source for user-facing pages.
-- When user-facing behavior changes, check both Chinese defaults and English mirrors.
-- Do not translate CLI commands, option names, JSON field names, or operator ids.
-- Explain those English identifiers in `references/zh-CN/glossary.md`.
-- User-facing Skill dialogue should follow the user's current language.
-- Durable data, schema fields, command names, and generated Skill files may remain English unless the user asks otherwise.
-
-## CLI Rules
-
-Keep `scripts/jinhua.py` single-file while the workflow remains understandable.
+## CLI Boundary
 
 The CLI may:
 
-- initialize runtime state
-- record structured signals
-- update local clusters
-- import global promotion records
-- emit proposal skeletons
-- record user-gated outcomes
-- suggest global merge candidates without mutation
-- compact and validate data
+- initialize and migrate runtime;
+- record validated signals;
+- update exact local and global clusters;
+- recommend placement owners and project rule files;
+- create complete user-gated proposals;
+- record revision, rejection, and verified adoption;
+- validate runtime data.
 
 The CLI must not:
 
-- judge final transferability
-- auto-apply Skill edits without the user gate
-- store raw user text
-- run web searches
-- run as a daemon
+- make final semantic transferability judgments;
+- fuzzy-merge methods automatically;
+- write an approved Skill or rule file;
+- store raw user text;
+- run web searches;
+- run as a daemon.
 
-## Architecture Rules
+All accepted signals remain stored. Reject weak or unsafe content before writing.
 
-Do not add:
+## Trigger Boundary
 
-- daemon
-- external database
-- vector store
-- graph database
-- dashboard
-- multi-agent workflow
+Hooks may classify correction text, read ready/pending state, count turns, issue a fixed eight-turn review, and write invocation-guard runtime state.
 
-Only reconsider architecture when a measured bottleneck appears in real runtime data.
+Hooks must not migrate core schemas, log signals, create proposals, record gate outcomes, edit files, or call full `cycle` on every prompt.
 
-## Packaging Rules
+## Localization
 
-Do not package:
+- Chinese public docs are the default user-facing source.
+- English mirrors are maintained for public behavior.
+- Do not translate CLI commands, option names, JSON keys, operator ids, or placement ids.
+- Explain stable identifiers in `references/zh-CN/glossary.md`.
+- User-facing gates and explanations follow the user's current language.
 
-- `.jinhua/`
-- `global-data/`
-- `.claude/`
-- `skill.zip`
-- `__pycache__/`
-- local permission files
-- `.archive/`
+## Architecture
 
-Schema changes must update `references/operator-json-schema.md` and pass `validate`.
+Do not add a daemon, external database, vector store, graph database, dashboard, multi-agent workflow, or second experience ledger without measured evidence and an explicit design decision.
+
+## Packaging And Privacy
+
+Never package or commit:
+
+- `.jinhua/`;
+- `global-data/`;
+- `.claude/`;
+- `.archive/`;
+- `__pycache__/` or Python bytecode;
+- local permission files or generated archives.
+
+## Required Verification
+
+```bash
+python scripts/test_core_loop.py
+python scripts/test_trigger_layer.py
+python scripts/test_adapters.py
+python -m py_compile scripts/jinhua.py hooks/codex_user_prompt_submit.py hooks/codex_post_tool_use.py hooks/codex_stop.py
+python scripts/jinhua.py --project-root <project-root> validate
+git diff --check
+```
+
+Schema changes must update `references/runtime-schema.md` and its Chinese mirror. Trigger changes must update Hook tests and both Hook references.
+
+Every published Skill/plugin change must complete: verification, plugin-creator cachebuster/reinstall, local enabled check, commit, and push.
