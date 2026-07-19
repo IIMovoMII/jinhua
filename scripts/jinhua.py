@@ -125,6 +125,31 @@ GLOBAL_STRENGTH_THRESHOLD = 7
 GLOBAL_FAST_PROJECT_THRESHOLD = 2
 GLOBAL_FAST_STRENGTH_THRESHOLD = 6
 DEFAULT_RUNTIME_DIR_NAME = ".jinhua"
+HOOK_PROJECT_PATH_KEYS = frozenset(
+    {
+        "cwd",
+        "project_root",
+        "projectRoot",
+        "project_dir",
+        "projectDir",
+        "working_directory",
+        "workingDirectory",
+        "current_working_directory",
+        "currentWorkingDirectory",
+        "workspace_root",
+        "workspaceRoot",
+    }
+)
+HOOK_PROJECT_ENV_KEYS = (
+    "JINHUA_PROJECT_ROOT",
+    "CODEX_PROJECT_ROOT",
+    "CODEX_PROJECT_DIR",
+    "CLAUDE_PROJECT_DIR",
+    "PROJECT_DIR",
+    "CURRENT_WORKING_DIRECTORY",
+    "INIT_CWD",
+    "PWD",
+)
 STATUS_LABELS = {
     "runtime": "运行态",
     "global_runtime": "全局运行态",
@@ -1928,7 +1953,7 @@ def extract_hook_prompt(payload: object) -> str:
 
 
 def read_hook_payload(text: str) -> dict:
-    stripped = text.strip()
+    stripped = text.strip().lstrip("\ufeff")
     if not stripped:
         return {}
     try:
@@ -1938,14 +1963,73 @@ def read_hook_payload(text: str) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def hook_project_root(payload: dict, args: argparse.Namespace | None) -> Path:
+def read_hook_stdin() -> str:
+    stream = getattr(sys.stdin, "buffer", None)
+    if stream is None:
+        return sys.stdin.read()
+    raw = stream.read()
+    if not raw:
+        return ""
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")) or raw.count(b"\x00") > len(raw) // 10:
+        try:
+            return raw.decode("utf-16")
+        except UnicodeDecodeError:
+            pass
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        encoding = getattr(sys.stdin, "encoding", None) or "mbcs"
+        return raw.decode(encoding, errors="replace")
+
+
+def normalize_hook_path(value: object) -> Path | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = os.path.expandvars(os.path.expanduser(value.strip().strip('"')))
+    if not text:
+        return None
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    try:
+        candidate = candidate.resolve()
+    except OSError:
+        return None
+    if candidate.exists() and candidate.is_file():
+        candidate = candidate.parent
+    return candidate
+
+
+def hook_project_root_info(payload: dict, args: argparse.Namespace | None) -> tuple[Path | None, str]:
     configured = getattr(args, "project_root", ".") if args is not None else "."
-    if str(configured).strip() not in {"", "."}:
-        return Path(configured).expanduser().resolve()
-    cwd = payload.get("cwd")
-    if isinstance(cwd, str) and cwd.strip():
-        return Path(cwd).expanduser().resolve()
-    return Path(".").resolve()
+    if str(configured or "").strip() not in {"", "."}:
+        root = normalize_hook_path(str(configured))
+        if root is not None:
+            return root, "explicit"
+
+    payload_value = extract_first_string(payload, HOOK_PROJECT_PATH_KEYS)
+    root = normalize_hook_path(payload_value)
+    if root is not None:
+        return root, "payload"
+
+    for key in HOOK_PROJECT_ENV_KEYS:
+        root = normalize_hook_path(os.environ.get(key, ""))
+        if root is not None:
+            return root, f"env:{key}"
+
+    root = normalize_hook_path(str(Path.cwd()))
+    plugin_roots = [skill_root()]
+    plugin_root_env = normalize_hook_path(os.environ.get("CLAUDE_PLUGIN_ROOT", ""))
+    if plugin_root_env is not None:
+        plugin_roots.append(plugin_root_env)
+    if root is not None and any(root == candidate or path_is_relative_to(root, candidate) for candidate in plugin_roots):
+        return root, "unsafe_process_cwd"
+    return root, "process_cwd"
+
+
+def hook_project_root(payload: dict, args: argparse.Namespace | None) -> Path:
+    root, _ = hook_project_root_info(payload, args)
+    return root or Path.cwd().resolve()
 
 
 def hook_cycle_command(payload: dict, args: argparse.Namespace | None) -> str:
@@ -1983,14 +2067,24 @@ def command_hook_user_prompt_submit(args: argparse.Namespace) -> None:
     if args.text:
         payload = {"hook_event_name": "UserPromptSubmit", "prompt": args.text}
     else:
-        payload = read_hook_payload(sys.stdin.read())
+        payload = read_hook_payload(read_hook_stdin())
     output = user_prompt_submit_hook_output(payload, args)
     print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
 
 
-def apply_payload_project_root(args: argparse.Namespace, payload: dict) -> None:
-    if str(getattr(args, "project_root", ".")).strip() in {"", "."}:
-        args.project_root = str(hook_project_root(payload, args))
+def apply_payload_project_root(args: argparse.Namespace, payload: dict) -> bool:
+    configured = str(getattr(args, "project_root", ".") or "").strip()
+    if configured not in {"", "."}:
+        args._jinhua_hook_runtime_disabled = False
+        return True
+
+    root, source = hook_project_root_info(payload, args)
+    if root is None or source == "unsafe_process_cwd":
+        args._jinhua_hook_runtime_disabled = True
+        return False
+    args.project_root = str(root)
+    args._jinhua_hook_runtime_disabled = False
+    return True
 
 
 def command_classify_input(args: argparse.Namespace) -> None:
@@ -2054,19 +2148,12 @@ def codex_user_prompt_submit_output(payload: dict, args: argparse.Namespace | No
     result = classify_user_correction(prompt)
     turn_state = {}
     ready_attention = {}
-    if args is not None:
+    if args is not None and not getattr(args, "_jinhua_hook_runtime_disabled", False):
         session_id = hook_session_id(payload)
         turn_id = hook_turn_id(payload)
         turn_state = record_prompt_turn(args, session_id, turn_id)
         ready_attention = ready_attention_context(args, session_id, turn_state)
-    output: dict = {
-        "continue": True,
-        "jinhua": {
-            "input_state": result["input_state"],
-            "turn_state": turn_state,
-            "ready_attention": ready_attention,
-        },
-    }
+    output: dict = {"continue": True}
     context = join_contexts(result["internal_context"], ready_attention.get("additional_context", ""))
     if not context:
         return output
@@ -2074,8 +2161,6 @@ def codex_user_prompt_submit_output(payload: dict, args: argparse.Namespace | No
         "hookEventName": "UserPromptSubmit",
         "additionalContext": context,
     }
-    if result["input_state"] == "strong_user_correction":
-        output["jinhua"]["trigger_intent"] = "user_correction"
     return output
 
 
@@ -2083,7 +2168,7 @@ def command_codex_user_prompt_submit(args: argparse.Namespace) -> None:
     if args.text:
         payload = {"hook_event_name": "UserPromptSubmit", "prompt": args.text}
     else:
-        payload = read_hook_payload(sys.stdin.read())
+        payload = read_hook_payload(read_hook_stdin())
     apply_payload_project_root(args, payload)
     output = codex_user_prompt_submit_output(payload, args)
     print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
@@ -2113,11 +2198,41 @@ def extract_first_string(payload: object, keys: set[str]) -> str:
     return ""
 
 
+def extract_first_bool(payload: object, keys: set[str]) -> bool:
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key in keys and isinstance(value, bool):
+                return value
+        for value in payload.values():
+            found = extract_first_bool(value, keys)
+            if found:
+                return True
+    elif isinstance(payload, list):
+        for value in payload:
+            found = extract_first_bool(value, keys)
+            if found:
+                return True
+    return False
+
+
 def hook_session_id(payload: dict) -> str:
-    found = extract_first_string(payload, {"session_id", "sessionId", "conversation_id", "conversationId"})
+    found = extract_first_string(
+        payload,
+        {
+            "session_id",
+            "sessionId",
+            "conversation_id",
+            "conversationId",
+            "thread_id",
+            "threadId",
+        },
+    )
     if found:
         return method_hash(found)
-    cwd = payload.get("cwd")
+    transcript = extract_first_string(payload, {"transcript_path", "transcriptPath"})
+    if transcript:
+        return method_hash(transcript)
+    cwd = extract_first_string(payload, HOOK_PROJECT_PATH_KEYS)
     return method_hash(str(cwd or "default-session"))
 
 
@@ -2281,18 +2396,17 @@ def command_guard(args: argparse.Namespace) -> None:
 def codex_post_tool_use_output(payload: dict, args: argparse.Namespace) -> dict:
     entry = jinhua_entry_from_payload(payload)
     output: dict = {"continue": True}
-    if not entry:
+    if not entry or getattr(args, "_jinhua_hook_runtime_disabled", False):
         return output
     session_id = hook_session_id(payload)
     turn_id = hook_turn_id(payload)
     reason = extract_hook_prompt(payload) or entry
-    guard = invocation_guard(args, session_id, turn_id, "post_tool_use", reason, entry, mark=True)
-    output["jinhua"] = {"invocation_guard": guard}
+    invocation_guard(args, session_id, turn_id, "post_tool_use", reason, entry, mark=True)
     return output
 
 
 def command_codex_post_tool_use(args: argparse.Namespace) -> None:
-    payload = read_hook_payload(sys.stdin.read())
+    payload = read_hook_payload(read_hook_stdin())
     apply_payload_project_root(args, payload)
     output = codex_post_tool_use_output(payload, args)
     print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
@@ -2344,9 +2458,9 @@ def parse_output_state(text: str) -> dict:
     }
 
 
-def stop_ticket_once(args: argparse.Namespace, session_id: str, turn_id: str) -> bool:
+def stop_ticket_once(args: argparse.Namespace, session_id: str, turn_id: str, kind: str = "missing_tail") -> bool:
     state = read_guard_state(args)
-    key = f"{session_id}:{turn_id}"
+    key = f"{kind}:{session_id}:{turn_id}"
     if key in state.get("stop_tickets", []):
         return False
     state.setdefault("stop_tickets", []).append(key)
@@ -2359,39 +2473,35 @@ def codex_stop_output(payload: dict, args: argparse.Namespace) -> dict:
     parsed = parse_output_state(message)
     session_id = hook_session_id(payload)
     turn_id = hook_turn_id(payload)
-    output: dict = {"continue": True, "jinhua": {"output_state": parsed}}
+    output: dict = {"continue": True}
+    if getattr(args, "_jinhua_hook_runtime_disabled", False):
+        return output
+    if extract_first_bool(payload, {"stop_hook_active", "stopHookActive"}):
+        return output
     periodic = consume_periodic_stop_due(args, session_id)
     if periodic["due"]:
-        guard = invocation_guard(args, session_id, turn_id, "stop", "periodic conversation experience check", "periodic_stop", mark=False)
-        output["jinhua"]["periodic_stop"] = periodic
-        output["jinhua"]["invocation_guard"] = guard
-        if guard["decision"] == "allow":
-            output["hookSpecificOutput"] = {
-                "hookEventName": "Stop",
-                "additionalContext": (
-                    "Periodic jinhua check: scan this turn and prior conversation for reusable workflow lessons. "
-                    "If found, use jinhua rules; otherwise stay silent."
-                ),
-            }
+        if stop_ticket_once(args, session_id, turn_id, "periodic"):
+            output["decision"] = "block"
+            output["reason"] = (
+                "Periodic jinhua check... scan this turn and prior conversation for reusable workflow lessons. "
+                "If found, use jinhua rules; otherwise stay silent."
+            )
         return output
 
     if not parsed["had_tail"]:
-        output["jinhua"]["missing_tail_ticketed"] = stop_ticket_once(args, session_id, turn_id)
+        stop_ticket_once(args, session_id, turn_id, "missing_tail")
         return output
 
     if parsed["output_state"] != "jinhua_candidate":
         return output
 
     guard = invocation_guard(args, session_id, turn_id, "stop", parsed.get("reason", ""), "output_state", mark=False)
-    output["jinhua"]["invocation_guard"] = guard
-    if guard["decision"] == "allow":
-        output["hookSpecificOutput"] = {
-            "hookEventName": "Stop",
-            "additionalContext": (
-                "Output marked jinhua_candidate. If this exposes a reusable trigger plus action, "
-                "use the existing jinhua cycle/log-signal/propose flow; do not bypass the user gate."
-            ),
-        }
+    if guard["decision"] == "allow" and stop_ticket_once(args, session_id, turn_id, "candidate"):
+        output["decision"] = "block"
+        output["reason"] = (
+            "Jinhua candidate: if this exposes a reusable trigger plus action, use the existing "
+            "jinhua cycle/log-signal/propose flow; do not bypass the user gate."
+        )
     return output
 
 
@@ -2402,7 +2512,7 @@ def command_parse_output_state(args: argparse.Namespace) -> None:
 
 
 def command_codex_stop(args: argparse.Namespace) -> None:
-    payload = read_hook_payload(sys.stdin.read())
+    payload = read_hook_payload(read_hook_stdin())
     apply_payload_project_root(args, payload)
     output = codex_stop_output(payload, args)
     print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))

@@ -45,17 +45,25 @@ jinhua/
 ├── .codex-plugin/
 │   └── plugin.json
 ├── hooks/
+│   ├── hooks.json
 │   ├── codex-hooks.json
 │   ├── codex_user_prompt_submit.py
 │   ├── codex_post_tool_use.py
 │   ├── codex_stop.py
 │   └── claude-codex-hooks.json（legacy）
+├── adapters/
+│   ├── README.md
+│   ├── openclaw/
+│   ├── hermes/
+│   ├── trae/
+│   └── workbuddy/
 ├── skills/
 │   └── jinhua/
 │       └── SKILL.md
 ├── scripts/
 │   ├── jinhua.py
-│   └── test_trigger_layer.py
+│   ├── test_trigger_layer.py
+│   └── test_adapters.py
 ├── references/
 │   ├── cli-usage.md
 │   ├── data-policy.md
@@ -99,8 +107,8 @@ jinhua/global-data/
 - `classify-input`：新触发层的本地纠错分类。
 - `codex-user-prompt-submit`：Codex 第一道输入侧 hook 入口。
 - `codex-post-tool-use`：Codex 第二道 invocation guard 入口。
-- `codex-stop`：Codex 第三道输出状态尾巴入口。
-- `parse-output-state`：只读解析输出状态尾巴。
+- `codex-stop`：Codex 第三道状态尾巴与受保护的继续检查入口。
+- `parse-output-state`：只读解析状态尾巴，不改写宿主正文。
 - `guard`：手动检查 invocation guard。
 - `wake-check`：legacy 兼容粗筛，不再是主路径。
 - `hook-user-prompt-submit`：legacy 兼容适配器，不再是主路径。
@@ -128,6 +136,8 @@ jinhua/global-data/
 - `project-index.json` 保存项目身份哈希，不保存原始路径。
 - `global-data/` 和 `.jinhua/` 是运行态，不打包、不提交。
 - 一个工作区混有多个不相关项目或对话时，用 `--project-id` 或 `JINHUA_PROJECT_ID` 区分。
+- Codex wrapper 会从 Hook payload（包括带 UTF-8 BOM 的输入）和支持的环境变量解析项目根目录；如果只能得到插件目录，就不会把运行态写进去。
+- Codex 发现 Hook 和真正执行 Hook 是两件事：如果状态是 `modified` 或 `untrusted`，必须先由宿主信任后才能运行。
 
 ## 不要回退
 
@@ -141,4 +151,5 @@ jinhua/global-data/
 - 不要把宽泛的观察命令加入主流程。
 - 不要让 hook 承担经验系统；hook 只做分类、防重复和状态尾巴解析。
 - 不要让就绪聚类隐身；hook 可以把它带回注意力，但写提案仍然必须走 `cycle`、`propose` 和用户确认门。
+- 不要为了追每个 agent 改核心插件；宿主专用包装放在 `adapters/`。
 - 仓库内插件元数据保持很薄：marketplace 文件负责被发现，`.codex-plugin/plugin.json` 暴露 Codex hooks 和 skills，真正的方法论逻辑仍然集中在根目录 `SKILL.md`。

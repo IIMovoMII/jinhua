@@ -1,0 +1,14 @@
+{
+  "id": "jinhua",
+  "name": "jinhua",
+  "description": "Gated Skill evolution adapter for OpenClaw.",
+  "version": "1.0.0",
+  "skills": [
+    "skills/jinhua"
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

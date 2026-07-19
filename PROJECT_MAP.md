@@ -40,17 +40,25 @@ jinhua/
 |-- .codex-plugin/
 |   `-- plugin.json
 |-- hooks/
+|   |-- hooks.json
 |   |-- codex-hooks.json
 |   |-- codex_user_prompt_submit.py
 |   |-- codex_post_tool_use.py
 |   |-- codex_stop.py
 |   `-- claude-codex-hooks.json (legacy)
+|-- adapters/
+|   |-- README.md
+|   |-- openclaw/
+|   |-- hermes/
+|   |-- trae/
+|   `-- workbuddy/
 |-- skills/
 |   `-- jinhua/
 |       `-- SKILL.md
 |-- scripts/
 |   |-- jinhua.py
-|   `-- test_trigger_layer.py
+|   |-- test_trigger_layer.py
+|   `-- test_adapters.py
 |-- references/
 |   |-- cli-usage.md
 |   |-- operator-json-schema.md
@@ -85,8 +93,8 @@ jinhua/global-data/
 - `classify-input`
 - `codex-user-prompt-submit`
 - `codex-post-tool-use`
-- `codex-stop`
-- `parse-output-state`
+- `codex-stop` (parse output state and request a guarded continuation when needed)
+- `parse-output-state` (read-only tail parser; it does not rewrite host output)
 - `guard`
 - `wake-check`
 - `hook-user-prompt-submit`
@@ -114,6 +122,8 @@ The public CLI surface is intentionally focused on the closed loop above. `wake-
 - `project-index.json` stores hashed project identities, not raw paths.
 - `global-data/` and `.jinhua/` are runtime state and must not be packaged.
 - Use `--project-id` or `JINHUA_PROJECT_ID` when one workspace contains unrelated projects or conversations.
+- Codex wrappers resolve project roots from hook payloads (including UTF-8 BOM input) and supported environment variables; an unsafe plugin-directory fallback never receives runtime state.
+- Codex hook discovery is separate from execution: a hook marked `modified` or `untrusted` must be trusted by the host before it can run.
 
 ## Do Not Regress
 
@@ -127,4 +137,5 @@ The public CLI surface is intentionally focused on the closed loop above. `wake-
 - Do not add broad observation commands as first-class workflow.
 - Do not make hooks own experience logic; they only classify, guard, and parse state tails.
 - Do not leave ready clusters invisible; hook attention may surface them, but proposal writing still belongs to `cycle` plus `propose` and the user gate.
+- Do not change the core plugin to chase every agent. Put host-specific wrappers under `adapters/`.
 - Keep repo-local plugin metadata thin: marketplace files route discovery, `.codex-plugin/plugin.json` exposes Codex hooks and skills, and the canonical methodology logic stays in the root `SKILL.md`.

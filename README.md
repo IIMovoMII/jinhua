@@ -52,13 +52,13 @@ Codex 插件主路径是三道闸门：
 
 - 第一道：`UserPromptSubmit` 本地判断用户是否在纠错，输出 `none` / `possible_user_correction` / `strong_user_correction`，只注入极短内部提示。
 - 第二道：agent 可以在当前轮直接调用 jinhua；`invocation guard` 只负责防止同一轮重复调用。
-- 第三道：`Stop` 解析极短输出状态尾巴，例如 `output_state: ok` 或 `output_state: jinhua_candidate`，先查 guard，再决定是否提醒 agent 按原规则考虑 jinhua。
+- 第三道：`Stop` 解析极短输出状态尾巴，例如 `output_state: ok` 或 `output_state: jinhua_candidate`；需要检查时按 Codex 支持的 `decision: block + reason` 请求一次继续处理，先查 guard，不绕过原规则。
 
 第一道还会本地读取现有运行态。如果发现已经有 `就绪` 聚类或 `待确认门`，会把一句极短提醒写进下一轮上下文：先跑 `cycle`，再创建一个提案，或明确说明为什么跳过。这个检查只读本地 JSON/JSONL，不运行 `cycle`，不写信号，不生成提案。
 
-第三道还会按单个对话计数，每 8 轮做一次静默兜底，提醒 agent 极短检查本轮和过往对话是否出现可复用经验；没有候选就不打扰用户。
+第三道还会按单个对话计数，每 8 轮做一次兜底检查，要求 agent 极短扫描本轮和过往对话是否出现可复用经验。普通回合不增加模型调用；只有周期到期或已有候选时，Stop hook 才请求一次继续处理，并在 `stop_hook_active` 回合放行防止循环。
 
-三道闸门都不会直接写 `log-signal`、不会生成 proposal、不会改 Skill、不会绕过用户确认门。正常情况下不增加额外 API 调用。
+三道闸门都不会直接写 `log-signal`、不会生成 proposal、不会改 Skill、不会绕过用户确认门。Hook 的 stdout 严格使用 Codex 官方输出字段，不输出内部状态字段。
 
 Codex hook 配置在：
 
@@ -69,10 +69,14 @@ hooks/codex-hooks.json
 它调用：
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-user-prompt-submit
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-post-tool-use
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-stop
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py"
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
 ```
+
+wrapper 会优先从 Hook payload（包括常见嵌套字段）解析项目根目录，再读取项目目录环境变量，最后才使用 Hook 进程当前目录。如果最后只能得到插件目录本身，Hook 会跳过运行态写入，避免把 `.jinhua` 写进安装目录。
+
+插件更新后，Codex 可能先把 Hook 标为 `modified` 或 `untrusted`。此时 Hook 已被发现但不会执行，必须先由 Codex 宿主信任当前 Hook 内容；这个信任状态属于宿主配置，不属于 Jinhua 经验账本。
 
 旧的 `wake-check` 和 `hook-user-prompt-submit` 仍保留为兼容命令，但不再是推荐主路径。
 
@@ -84,6 +88,20 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-stop
 - `.claude-plugin/marketplace.json`
 
 这意味着 `jinhua` 不只是一个 Skill 仓库：Codex 可以通过插件层加载 hook；Claude Code 等其他支持 Skill/CLI 的 agent 仍可使用核心闭环，hook 需要按各自平台配置。
+
+## 其他 Agent 适配
+
+适配层都放在 `adapters/`，不改 jinhua 核心闭环，也不新增第二套经验系统。
+
+| Agent | 适配方式 | 自动程度 |
+| --- | --- | --- |
+| Claude Code | `hooks/hooks.json` | 原生 plugin hook 适配，复用三道闸门 wrapper。 |
+| OpenClaw | `adapters/openclaw/openclaw.plugin.json` + Skill | 提供 OpenClaw plugin/Skill 包装。 |
+| Hermes | `adapters/hermes/skills/jinhua/SKILL.md` | Skill 适配。 |
+| TRAE | `adapters/trae/skills/jinhua/SKILL.md` | Skill 适配。 |
+| WorkBuddy | `adapters/workbuddy/skills/jinhua/SKILL.md` | Skill 适配。 |
+
+其中 Claude Code 和 OpenClaw 有独立适配文件；Hermes、TRAE、WorkBuddy 走轻量 Skill 适配，是否自动 hook 取决于宿主自身是否支持对应配置。
 
 ## 判断规则
 
@@ -239,8 +257,8 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> validate
 - `classify-input`：新触发层的本地纠错分类。
 - `codex-user-prompt-submit`：Codex 第一道输入侧 hook 入口。
 - `codex-post-tool-use`：Codex 第二道 invocation guard 入口。
-- `codex-stop`：Codex 第三道输出状态尾巴入口。
-- `parse-output-state`：只读解析并剥离状态尾巴。
+- `codex-stop`：Codex 第三道输出状态尾巴与继续检查入口。
+- `parse-output-state`：只读解析状态尾巴；不改写宿主已经生成的正文。
 - `guard`：手动检查 invocation guard。
 - `wake-check`：legacy 兼容粗筛，不再是主路径。
 - `hook-user-prompt-submit`：legacy 兼容适配器，不再是主路径。

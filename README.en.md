@@ -39,13 +39,13 @@ The Codex plugin path uses three gates:
 
 - Gate 1: `UserPromptSubmit` locally classifies user correction as `none`, `possible_user_correction`, or `strong_user_correction`, and injects only a tiny internal hint.
 - Gate 2: the agent may directly call jinhua in the current turn; the `invocation guard` only prevents duplicate same-turn calls.
-- Gate 3: `Stop` parses a tiny output-state tail such as `output_state: ok` or `output_state: jinhua_candidate`, checks the guard, and only then may remind the agent to consider the normal jinhua rules.
+- Gate 3: `Stop` parses a tiny output-state tail such as `output_state: ok` or `output_state: jinhua_candidate`; when a check is needed it uses Codex's supported `decision: block` plus a short `reason` to request one continuation, after checking the guard.
 
 Gate 1 also reads existing runtime state locally. If ready clusters or pending user gates exist, it injects one short next-turn reminder: run `cycle`, then create one proposal or state a concrete skip reason. This is a read-only JSON/JSONL check; it does not run `cycle`, log signals, or create proposals.
 
-Gate 3 also keeps a per-conversation counter and, every 8 user turns, performs one silent fallback reminder to scan this turn and prior conversation for reusable lessons.
+Gate 3 also keeps a per-conversation counter and, every 8 user turns, requests one short fallback check of this turn and prior conversation for reusable lessons. Ordinary turns add no model call; only a due periodic check or an existing candidate requests one continuation, and `stop_hook_active` is always passed through to prevent loops.
 
-The trigger layer never writes `log-signal`, creates proposals, edits Skills, or bypasses the user gate. Normal idle use adds no extra model call.
+The trigger layer never writes `log-signal`, creates proposals, edits Skills, or bypasses the user gate. Hook stdout uses only Codex's official wire fields and does not expose internal state keys.
 
 Codex hook config lives at:
 
@@ -56,10 +56,14 @@ hooks/codex-hooks.json
 It calls:
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-user-prompt-submit
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-post-tool-use
-python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> codex-stop
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py"
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
 ```
+
+The wrappers resolve the project root from the hook payload first, including common nested fields, then from supported project-directory environment variables, and finally from the hook process working directory. If that fallback is the installed plugin directory itself, the hook skips runtime writes instead of placing `.jinhua` in the plugin.
+
+After a plugin update, Codex may first mark a hook as `modified` or `untrusted`. In that state the hook is discovered but does not execute; Codex must trust the current hook content first. This trust state belongs to the host configuration, not to the Jinhua experience ledger.
 
 The old `wake-check` and `hook-user-prompt-submit` commands remain as legacy compatibility entries, but they are no longer the recommended primary path.
 
@@ -71,6 +75,20 @@ This repo now ships the plugin-layer files needed for that trust flow:
 - `.claude-plugin/marketplace.json`
 
 In other words, `jinhua` is no longer just a Skill repo: Codex can load hooks through the plugin layer; Claude Code and other Skill/CLI-capable agents can still use the core loop, with hooks configured through their own platform conventions.
+
+## Other Agent Adapters
+
+Adapters live under `adapters/`. They do not change the core jinhua loop or add a second experience system.
+
+| Agent | Adapter | Automation level |
+| --- | --- | --- |
+| Claude Code | `hooks/hooks.json` | Native plugin hook adapter that reuses the three-gate wrappers. |
+| OpenClaw | `adapters/openclaw/openclaw.plugin.json` + Skill | OpenClaw plugin/Skill packaging. |
+| Hermes | `adapters/hermes/skills/jinhua/SKILL.md` | Skill adapter. |
+| TRAE | `adapters/trae/skills/jinhua/SKILL.md` | Skill adapter. |
+| WorkBuddy | `adapters/workbuddy/skills/jinhua/SKILL.md` | Skill adapter. |
+
+Claude Code and OpenClaw get dedicated adapter files. Hermes, TRAE, and WorkBuddy use lightweight Skill adapters; automatic hooks depend on the host's own supported configuration.
 
 ## Rules
 
@@ -205,7 +223,7 @@ Primary workflow:
 - `codex-user-prompt-submit`
 - `codex-post-tool-use`
 - `codex-stop`
-- `parse-output-state`
+- `parse-output-state` (read-only tail parsing; it does not rewrite host output)
 - `guard`
 - `wake-check` (legacy)
 - `hook-user-prompt-submit` (legacy)

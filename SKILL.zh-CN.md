@@ -56,19 +56,21 @@ Skill 不能像后台服务一样常驻运行。jinhua 所说的“自动”，�
 
 1. `UserPromptSubmit`：只做本地输入分类，输出 `none`、`possible_user_correction` 或 `strong_user_correction`。它不记录信号、不运行 `cycle`、不创建提案、不改 Skill。
 2. agent 直接调用：用户明确要求沉淀，或 agent 明确看到可复用的工作流、验证标准、工具选择经验时，可以在当前轮直接调用 jinhua。轻量 invocation guard 会防止同一轮重复调用。
-3. `Stop`：可选的输出侧轻状态尾巴解析，并按单个对话每 8 个用户回合做一次静默兜底。它只解析 `output_state`、`visibility`、`reason`，检查 invocation guard，并用极短提示提醒 agent 检查本轮和过往对话是否有可复用经验。它不绕过 jinhua 原有规则，也不绕过用户确认门。
+3. `Stop`：解析轻量状态尾巴，并按单个对话每 8 个用户回合做一次兜底检查。如果已有可复用候选或周期检查到期，就用 Codex 支持的 `decision: block + reason` 请求一次继续处理；`stop_hook_active = true` 时始终直接放行，防止循环。它不绕过 jinhua 原有规则，也不绕过用户确认门。
 
 `UserPromptSubmit` 还会做只读的就绪提醒检查。如果本地或全局已经有 `ready` 聚类，或者已经有提案停在用户确认门，它可以注入一句很短的提醒：先跑 `cycle`，再创建一个提案、展示一个确认门，或明确说明为什么跳过。这个检查只读现有 JSON/JSONL，不运行 `cycle`、不写 `signals.jsonl`、不创建提案、不改 Skill。
 
 Codex 插件 hook 配置在 `hooks/codex-hooks.json`，会调用：
 
 ```bash
-python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-user-prompt-submit
-python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-post-tool-use
-python <jinhua-dir>/scripts/jinhua.py --project-root <current-project-root> codex-stop
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py"
+python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
 ```
 
-旧的 `wake-check` 和 `hook-user-prompt-submit` 可以为了兼容继续存在，但不再是主触发路径。
+这些 wrapper 不把检出目录写死。它们按以下顺序定位目标项目：先读 hook payload 中的项目路径（包括常见嵌套字段），再读支持的项目目录环境变量，最后才使用 Hook 进程的当前目录。如果最后得到的只是插件目录本身，Hook 会跳过运行态写入，不会把 `.jinhua` 写进已安装插件。
+
+Hook 输出只能包含宿主协议支持的字段，分类器和 guard 的内部细节不写进输出，而是保留在本地运行态或直接省略。旧的 `wake-check` 和 `hook-user-prompt-submit` 可以为了兼容继续存在，但不再是主触发路径。
 
 当本 Skill 真正被选中时，运行确定性检查点：
 
