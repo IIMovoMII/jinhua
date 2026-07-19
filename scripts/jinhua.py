@@ -104,20 +104,62 @@ GLOBAL_STRENGTH_THRESHOLD = 7
 GLOBAL_FAST_PROJECT_THRESHOLD = 2
 GLOBAL_FAST_STRENGTH_THRESHOLD = 6
 DEFAULT_RUNTIME_DIR_NAME = ".jinhua"
-HOOK_PROJECT_PATH_KEYS = frozenset(
+HOOK_PROJECT_PATH_KEYS = (
+    "cwd",
+    "project_root",
+    "projectRoot",
+    "project_dir",
+    "projectDir",
+    "working_directory",
+    "workingDirectory",
+    "current_working_directory",
+    "currentWorkingDirectory",
+    "workspace_root",
+    "workspaceRoot",
+)
+HOOK_METADATA_PARENT_PATHS = ((), ("event",), ("event", "context"), ("context",))
+HOOK_TOOL_PARENT_PATHS = ((), ("event",))
+HOOK_PROMPT_PARENT_PATHS = ((), ("event",), ("input",), ("payload",))
+HOOK_SESSION_ID_KEYS = (
+    "session_id",
+    "sessionId",
+    "conversation_id",
+    "conversationId",
+    "thread_id",
+    "threadId",
+)
+HOOK_TURN_ID_KEYS = (
+    "turn_id",
+    "turnId",
+    "prompt_id",
+    "promptId",
+    "message_id",
+    "messageId",
+    "request_id",
+    "requestId",
+)
+HOOK_SHELL_TOOL_NAMES = frozenset(
     {
-        "cwd",
-        "project_root",
-        "projectRoot",
-        "project_dir",
-        "projectDir",
-        "working_directory",
-        "workingDirectory",
-        "current_working_directory",
-        "currentWorkingDirectory",
-        "workspace_root",
-        "workspaceRoot",
+        "bash",
+        "shell",
+        "shell_command",
+        "exec_command",
+        "powershell",
+        "pwsh",
+        "cmd",
+        "terminal",
     }
+)
+JINHUA_GUARDED_COMMANDS = (
+    "log-signal",
+    "global-propose",
+    "global-cycle",
+    "propose",
+    "cycle",
+    "apply-proposal",
+    "global-apply",
+    "reject-proposal",
+    "global-reject",
 )
 HOOK_PROJECT_ENV_KEYS = (
     "JINHUA_PROJECT_ROOT",
@@ -1915,19 +1957,11 @@ def join_contexts(*parts: str) -> str:
 def extract_hook_prompt(payload: object) -> str:
     if not isinstance(payload, dict):
         return ""
-
-    for key in ("prompt", "userPrompt", "message"):
-        value = payload.get(key)
-        if isinstance(value, str):
-            return value
-
-    for parent_key in ("input", "payload", "event"):
-        parent = payload.get(parent_key)
-        if isinstance(parent, dict):
-            value = parent.get("prompt")
-            if isinstance(value, str):
-                return value
-    return ""
+    return authoritative_string(
+        payload,
+        ("prompt", "userPrompt", "message"),
+        HOOK_PROMPT_PARENT_PATHS,
+    )
 
 
 def read_hook_payload(text: str) -> dict:
@@ -1985,7 +2019,7 @@ def hook_project_root_info(payload: dict, args: argparse.Namespace | None) -> tu
         if root is not None:
             return root, "explicit"
 
-    payload_value = extract_first_string(payload, HOOK_PROJECT_PATH_KEYS)
+    payload_value = authoritative_string(payload, HOOK_PROJECT_PATH_KEYS, HOOK_METADATA_PARENT_PATHS)
     root = normalize_hook_path(payload_value)
     if root is not None:
         return root, "payload"
@@ -2086,7 +2120,11 @@ def codex_user_prompt_submit_output(payload: dict, args: argparse.Namespace | No
     result = classify_user_correction(prompt)
     turn_state = {}
     ready_attention = {}
-    if args is not None and not getattr(args, "_jinhua_hook_runtime_disabled", False):
+    if (
+        args is not None
+        and not getattr(args, "_jinhua_hook_runtime_disabled", False)
+        and hook_identity_available(payload)
+    ):
         session_id = hook_session_id(payload)
         turn_id = hook_turn_id(payload)
         turn_state = record_prompt_turn(args, session_id, turn_id)
@@ -2112,70 +2150,65 @@ def command_codex_user_prompt_submit(args: argparse.Namespace) -> None:
     print(json.dumps(output, ensure_ascii=False, indent=2 if args.pretty else None))
 
 
-def compact_json_text(value: object) -> str:
-    try:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True)
-    except TypeError:
-        return str(value)
+def payload_container(payload: object, path: tuple[str, ...]) -> dict | None:
+    current = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current if isinstance(current, dict) else None
 
 
-def extract_first_string(payload: object, keys: set[str]) -> str:
-    if isinstance(payload, dict):
-        for key, value in payload.items():
-            if key in keys and isinstance(value, str) and value.strip():
-                return value.strip()
-        for value in payload.values():
-            found = extract_first_string(value, keys)
-            if found:
-                return found
-    elif isinstance(payload, list):
-        for value in payload:
-            found = extract_first_string(value, keys)
-            if found:
-                return found
-    return ""
+def authoritative_value(
+    payload: object,
+    keys: tuple[str, ...],
+    parent_paths: tuple[tuple[str, ...], ...],
+) -> object | None:
+    for path in parent_paths:
+        container = payload_container(payload, path)
+        if container is None:
+            continue
+        for key in keys:
+            if key in container:
+                return container[key]
+    return None
 
 
-def extract_first_bool(payload: object, keys: set[str]) -> bool:
-    if isinstance(payload, dict):
-        for key, value in payload.items():
-            if key in keys and isinstance(value, bool):
-                return value
-        for value in payload.values():
-            found = extract_first_bool(value, keys)
-            if found:
-                return True
-    elif isinstance(payload, list):
-        for value in payload:
-            found = extract_first_bool(value, keys)
-            if found:
-                return True
-    return False
+def authoritative_string(
+    payload: object,
+    keys: tuple[str, ...],
+    parent_paths: tuple[tuple[str, ...], ...],
+) -> str:
+    value = authoritative_value(payload, keys, parent_paths)
+    return value.strip() if isinstance(value, str) and value.strip() else ""
+
+
+def authoritative_bool(
+    payload: object,
+    keys: tuple[str, ...],
+    parent_paths: tuple[tuple[str, ...], ...],
+) -> bool:
+    value = authoritative_value(payload, keys, parent_paths)
+    return value if isinstance(value, bool) else False
 
 
 def hook_session_id(payload: dict) -> str:
-    found = extract_first_string(
-        payload,
-        {
-            "session_id",
-            "sessionId",
-            "conversation_id",
-            "conversationId",
-            "thread_id",
-            "threadId",
-        },
-    )
+    found = authoritative_string(payload, HOOK_SESSION_ID_KEYS, HOOK_METADATA_PARENT_PATHS)
     if found:
         return method_hash(found)
-    transcript = extract_first_string(payload, {"transcript_path", "transcriptPath"})
+    transcript = authoritative_string(
+        payload,
+        ("transcript_path", "transcriptPath"),
+        HOOK_METADATA_PARENT_PATHS,
+    )
     if transcript:
         return method_hash(transcript)
-    cwd = extract_first_string(payload, HOOK_PROJECT_PATH_KEYS)
+    cwd = authoritative_string(payload, HOOK_PROJECT_PATH_KEYS, HOOK_METADATA_PARENT_PATHS)
     return method_hash(str(cwd or "default-session"))
 
 
 def hook_turn_id(payload: dict) -> str:
-    found = extract_first_string(payload, {"turn_id", "turnId", "message_id", "messageId", "request_id", "requestId"})
+    found = authoritative_string(payload, HOOK_TURN_ID_KEYS, HOOK_METADATA_PARENT_PATHS)
     if found:
         return method_hash(found)
     prompt = extract_hook_prompt(payload)
@@ -2184,29 +2217,139 @@ def hook_turn_id(payload: dict) -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
 
 
+def hook_identity_available(payload: dict) -> bool:
+    session_evidence = authoritative_string(
+        payload,
+        HOOK_SESSION_ID_KEYS + ("transcript_path", "transcriptPath") + HOOK_PROJECT_PATH_KEYS,
+        HOOK_METADATA_PARENT_PATHS,
+    )
+    turn_evidence = authoritative_string(payload, HOOK_TURN_ID_KEYS, HOOK_METADATA_PARENT_PATHS)
+    return bool(session_evidence and (turn_evidence or extract_hook_prompt(payload)))
+
+
 def periodic_stop_interval() -> int:
     return DEFAULT_PERIODIC_STOP_INTERVAL
 
 
-def jinhua_entry_from_payload(payload: dict) -> str:
-    text = compact_json_text(payload).lower()
-    commands = [
-        "log-signal",
-        "global-propose",
-        "global-cycle",
-        "propose",
-        "cycle",
-        "apply-proposal",
-        "global-apply",
-        "reject-proposal",
-        "global-reject",
-    ]
-    if "jinhua.py" not in text and "scripts/jinhua" not in text:
+def hook_tool_command(payload: dict) -> str:
+    tool_name = authoritative_string(payload, ("tool_name", "toolName"), HOOK_TOOL_PARENT_PATHS).lower()
+    if tool_name and tool_name not in HOOK_SHELL_TOOL_NAMES:
         return ""
-    for command in commands:
-        if re.search(rf"(^|[\s\"']){re.escape(command)}($|[\s\"'])", text):
+
+    tool_input = authoritative_value(payload, ("tool_input", "toolInput"), HOOK_TOOL_PARENT_PATHS)
+    if isinstance(tool_input, str) and tool_input.strip():
+        return tool_input.strip()
+    if isinstance(tool_input, dict):
+        command = authoritative_string(tool_input, ("command", "cmd"), ((),))
+        if command:
             return command
-    return "jinhua.py"
+        args = tool_input.get("args")
+        if isinstance(args, dict):
+            command = authoritative_string(args, ("command", "cmd"), ((),))
+            if command:
+                return command
+
+    if tool_name in HOOK_SHELL_TOOL_NAMES:
+        command = authoritative_string(payload, ("command", "cmd"), HOOK_TOOL_PARENT_PATHS)
+        if command:
+            return command
+        args = authoritative_value(payload, ("args", "arguments"), HOOK_TOOL_PARENT_PATHS)
+        if isinstance(args, dict):
+            return authoritative_string(args, ("command", "cmd"), ((),))
+    return ""
+
+
+def shell_command_tokens(command: str) -> list[str]:
+    tokens = re.findall(r'''"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s]+''', command)
+    result = []
+    for token in tokens:
+        if len(token) >= 2 and token[0] == token[-1] and token[0] in {'"', "'"}:
+            token = token[1:-1]
+        result.append(token)
+    return result
+
+
+def clean_command_token(token: str) -> str:
+    return token.strip().strip(";&|()")
+
+
+def command_basename(token: str) -> str:
+    return clean_command_token(token).replace("\\", "/").rsplit("/", 1)[-1].lower()
+
+
+def is_jinhua_script_token(token: str) -> bool:
+    return command_basename(token) == "jinhua.py"
+
+
+def jinhua_entry_from_command(command: str) -> str:
+    tokens = shell_command_tokens(command)
+    if not tokens:
+        return ""
+
+    index = 0
+    while index < len(tokens) and clean_command_token(tokens[index]) in {"", "&"}:
+        index += 1
+    while index < len(tokens) and "=" in tokens[index] and not tokens[index].startswith(("/", ".", "\\")):
+        index += 1
+    if index >= len(tokens):
+        return ""
+
+    executable = command_basename(tokens[index])
+    if executable in {"cmd", "cmd.exe"}:
+        for marker in ("/c", "/k"):
+            if marker in [clean_command_token(token).lower() for token in tokens[index + 1:]]:
+                marker_index = next(
+                    offset for offset in range(index + 1, len(tokens))
+                    if clean_command_token(tokens[offset]).lower() == marker
+                )
+                return jinhua_entry_from_command(" ".join(tokens[marker_index + 1:]))
+        return ""
+    if executable in {"powershell", "powershell.exe", "pwsh", "pwsh.exe", "bash", "sh"}:
+        wrapper_markers = {"-command", "-c", "-lc"}
+        for marker_index in range(index + 1, len(tokens)):
+            if clean_command_token(tokens[marker_index]).lower() in wrapper_markers:
+                return jinhua_entry_from_command(" ".join(tokens[marker_index + 1:]))
+        return ""
+
+    script_index = -1
+    if executable in {"python", "python.exe", "python3", "python3.exe", "py", "py.exe"}:
+        candidate_index = index + 1
+        while candidate_index < len(tokens) and clean_command_token(tokens[candidate_index]).startswith("-"):
+            candidate_index += 1
+        if candidate_index < len(tokens) and is_jinhua_script_token(tokens[candidate_index]):
+            script_index = candidate_index
+    elif is_jinhua_script_token(tokens[index]):
+        script_index = index
+    if script_index < 0:
+        return ""
+
+    options_with_values = {
+        "--project-root",
+        "--runtime-dir",
+        "--global-runtime-dir",
+        "--project-id",
+        "--agent-profile",
+    }
+    option_flags = {"--pretty"}
+    index = script_index + 1
+    while index < len(tokens):
+        token = clean_command_token(tokens[index])
+        lowered = token.lower()
+        if lowered in options_with_values:
+            index += 2
+            continue
+        if any(lowered.startswith(f"{option}=") for option in options_with_values):
+            index += 1
+            continue
+        if lowered in option_flags:
+            index += 1
+            continue
+        return lowered if lowered in JINHUA_GUARDED_COMMANDS else ""
+    return ""
+
+
+def jinhua_entry_from_payload(payload: dict) -> str:
+    return jinhua_entry_from_command(hook_tool_command(payload))
 
 
 def default_guard_state() -> dict:
@@ -2327,12 +2470,15 @@ def command_guard(args: argparse.Namespace) -> None:
 def codex_post_tool_use_output(payload: dict, args: argparse.Namespace) -> dict:
     entry = jinhua_entry_from_payload(payload)
     output: dict = {"continue": True}
-    if not entry or getattr(args, "_jinhua_hook_runtime_disabled", False):
+    if (
+        not entry
+        or getattr(args, "_jinhua_hook_runtime_disabled", False)
+        or not hook_identity_available(payload)
+    ):
         return output
     session_id = hook_session_id(payload)
     turn_id = hook_turn_id(payload)
-    reason = extract_hook_prompt(payload) or entry
-    invocation_guard(args, session_id, turn_id, "post_tool_use", reason, entry, mark=True)
+    invocation_guard(args, session_id, turn_id, "post_tool_use", "jinhua_workflow", entry, mark=True)
     return output
 
 
@@ -2354,12 +2500,12 @@ def stop_ticket_once(args: argparse.Namespace, session_id: str, turn_id: str, ki
 
 
 def codex_stop_output(payload: dict, args: argparse.Namespace) -> dict:
+    output: dict = {"continue": True}
+    if getattr(args, "_jinhua_hook_runtime_disabled", False) or not hook_identity_available(payload):
+        return output
     session_id = hook_session_id(payload)
     turn_id = hook_turn_id(payload)
-    output: dict = {"continue": True}
-    if getattr(args, "_jinhua_hook_runtime_disabled", False):
-        return output
-    if extract_first_bool(payload, {"stop_hook_active", "stopHookActive"}):
+    if authoritative_bool(payload, ("stop_hook_active", "stopHookActive"), HOOK_TOOL_PARENT_PATHS):
         return output
     periodic = consume_periodic_stop_due(args, session_id)
     if periodic["due"]:

@@ -71,15 +71,152 @@ def test_agent_direct_call_is_allowed_once() -> None:
         payload = {
             "session_id": "s1",
             "turn_id": "t2",
-            "tool_input": f'python "{Path(jinhua.__file__).resolve()}" --project-root "{tmp}" cycle',
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": f'python "{Path(jinhua.__file__).resolve()}" --project-root "{tmp}" cycle'
+            },
         }
         first = jinhua.codex_post_tool_use_output(payload, args)
         second = jinhua.codex_post_tool_use_output(payload, args)
+        later_entry = {
+            **payload,
+            "tool_input": {
+                "command": f'python "{Path(jinhua.__file__).resolve()}" --project-root "{tmp}" log-signal'
+            },
+        }
+        third = jinhua.codex_post_tool_use_output(later_entry, args)
         assert first == {"continue": True}
         assert second == {"continue": True}
+        assert third == {"continue": True}
         state = jinhua.read_guard_state(args)
         assert len(state["events"]) == 1
         assert state["events"][0]["entry"] == "cycle"
+
+
+def test_post_tool_use_requires_authoritative_shell_command_input() -> None:
+    command_text = "python scripts/jinhua.py cycle"
+    with tempfile.TemporaryDirectory() as tmp:
+        args = args_for(Path(tmp))
+        payloads = [
+            {
+                "session_id": "s1",
+                "turn_id": "prompt-mention",
+                "prompt": f"Explain {command_text}",
+                "tool_name": "Bash",
+                "tool_input": {"command": "Get-Content README.md"},
+            },
+            {
+                "session_id": "s1",
+                "turn_id": "read-output",
+                "tool_name": "Bash",
+                "tool_input": {"command": "Get-Content README.md"},
+                "tool_response": f"README example: {command_text}",
+            },
+            {
+                "session_id": "s1",
+                "turn_id": "error-output",
+                "tool_name": "Bash",
+                "tool_input": {"command": "Get-Content missing.md"},
+                "tool_response": {"stderr": f"Failed near {command_text}"},
+            },
+            {
+                "session_id": "s1",
+                "turn_id": "search-pattern",
+                "tool_name": "Bash",
+                "tool_input": {"command": f'rg "{command_text}" README.md'},
+            },
+            {
+                "session_id": "s1",
+                "turn_id": "function-source",
+                "tool_name": "functions.exec",
+                "tool_input": f"await tools.shell_command({{command: '{command_text}'}})",
+            },
+            {
+                "session_id": "s1",
+                "turn_id": "nested-output",
+                "tool_response": {"tool_input": {"command": command_text}},
+            },
+        ]
+        for payload in payloads:
+            assert jinhua.codex_post_tool_use_output(payload, args) == {"continue": True}
+        assert not jinhua.invocation_guard_path(args).exists()
+
+
+def test_real_shell_command_and_supported_wrappers_are_detected() -> None:
+    assert jinhua.jinhua_entry_from_command("python scripts/jinhua.py cycle") == "cycle"
+    assert jinhua.jinhua_entry_from_command("python scripts/jinhua.py --project-root . log-signal") == "log-signal"
+    assert jinhua.jinhua_entry_from_command('powershell -Command "python scripts/jinhua.py global-cycle"') == "global-cycle"
+    assert jinhua.jinhua_entry_from_command('rg "python scripts/jinhua.py cycle" README.md') == ""
+    assert jinhua.jinhua_entry_from_command("Write-Output 'python scripts/jinhua.py cycle'") == ""
+
+
+def test_authoritative_metadata_ignores_tool_response_fields() -> None:
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fake:
+        payload = {
+            "cwd": tmp,
+            "session_id": "real-session",
+            "turn_id": "real-turn",
+            "tool_response": {
+                "cwd": fake,
+                "session_id": "fake-session",
+                "turn_id": "fake-turn",
+            },
+        }
+        args = args_for(Path("."))
+        assert jinhua.apply_payload_project_root(args, payload) is True
+        assert Path(args.project_root) == Path(tmp).resolve()
+        assert jinhua.hook_session_id(payload) == jinhua.method_hash("real-session")
+        assert jinhua.hook_turn_id(payload) == jinhua.method_hash("real-turn")
+
+
+def test_unknown_payload_does_not_select_output_project_or_write_guard() -> None:
+    with tempfile.TemporaryDirectory() as fake:
+        env = {key: "" for key in jinhua.HOOK_PROJECT_ENV_KEYS}
+        args = args_for(Path("."))
+        payload = {
+            "tool_response": {
+                "cwd": fake,
+                "session_id": "fake-session",
+                "turn_id": "fake-turn",
+                "command": "python scripts/jinhua.py cycle",
+            }
+        }
+        with patch.dict(os.environ, env, clear=False), patch.object(
+            jinhua.Path,
+            "cwd",
+            return_value=jinhua.skill_root(),
+        ):
+            assert jinhua.apply_payload_project_root(args, payload) is False
+        assert jinhua.codex_post_tool_use_output(payload, args) == {"continue": True}
+        assert not (Path(fake) / ".jinhua" / "runtime" / "invocation-guard.json").exists()
+
+
+def test_missing_session_or_turn_identity_does_not_write_guard() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        args = args_for(Path(tmp))
+        command_payload = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "python scripts/jinhua.py cycle"},
+        }
+        prompt_payload = {"prompt": "普通问题"}
+        assert jinhua.codex_post_tool_use_output(command_payload, args) == {"continue": True}
+        assert jinhua.codex_user_prompt_submit_output(prompt_payload, args) == {"continue": True}
+        assert not jinhua.invocation_guard_path(args).exists()
+
+
+def test_claude_prompt_id_is_a_turn_identity() -> None:
+    post_payload = {
+        "session_id": "claude-session",
+        "prompt_id": "claude-prompt",
+        "tool_name": "Bash",
+        "tool_input": {"command": "python scripts/jinhua.py cycle"},
+    }
+    stop_payload = {
+        "session_id": "claude-session",
+        "prompt_id": "claude-prompt",
+        "stop_hook_active": False,
+    }
+    assert jinhua.hook_turn_id(post_payload) == jinhua.hook_turn_id(stop_payload)
 
 
 def test_stop_does_not_require_or_parse_output_tail() -> None:
@@ -220,7 +357,11 @@ def test_nested_codex_payload_cwd_selects_runtime_project() -> None:
 
 def test_hook_does_not_use_plugin_directory_as_implicit_project() -> None:
     env = {key: "" for key in jinhua.HOOK_PROJECT_ENV_KEYS}
-    with patch.dict(os.environ, env, clear=False):
+    with patch.dict(os.environ, env, clear=False), patch.object(
+        jinhua.Path,
+        "cwd",
+        return_value=jinhua.skill_root(),
+    ):
         args = args_for(Path("."))
         payload = {"session_id": "no-root-session", "turn_id": "no-root-turn", "prompt": "普通问题"}
         assert jinhua.apply_payload_project_root(args, payload) is False
@@ -246,6 +387,25 @@ def test_stop_hook_active_never_blocks_or_consumes_due() -> None:
         assert output == {"continue": True}
         state = jinhua.read_guard_state(args)
         assert state["sessions"][jinhua.hook_session_id(payload)]["periodic_stop_due"] is True
+
+
+def test_stop_ignores_fake_active_flag_in_tool_response() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        args = args_for(Path(tmp))
+        for index in range(1, 9):
+            jinhua.codex_user_prompt_submit_output(
+                {"session_id": "s1", "turn_id": f"u{index}", "prompt": "普通问题"},
+                args,
+            )
+        payload = {
+            "session_id": "s1",
+            "turn_id": "real-stop",
+            "stop_hook_active": False,
+            "tool_response": {"stop_hook_active": True},
+        }
+        output = jinhua.codex_stop_output(payload, args)
+        assert output["decision"] == "block"
+        assert "Periodic jinhua check..." in output["reason"]
 
 
 def test_hook_outputs_only_use_codex_wire_keys() -> None:
@@ -353,6 +513,12 @@ if __name__ == "__main__":
     test_internal_context_stays_short_and_safe()
     test_invocation_guard_deduplicates_same_turn()
     test_agent_direct_call_is_allowed_once()
+    test_post_tool_use_requires_authoritative_shell_command_input()
+    test_real_shell_command_and_supported_wrappers_are_detected()
+    test_authoritative_metadata_ignores_tool_response_fields()
+    test_unknown_payload_does_not_select_output_project_or_write_guard()
+    test_missing_session_or_turn_identity_does_not_write_guard()
+    test_claude_prompt_id_is_a_turn_identity()
     test_stop_does_not_require_or_parse_output_tail()
     test_periodic_stop_is_per_session_and_light()
     test_periodic_stop_skips_when_jinhua_already_ran()
@@ -362,6 +528,7 @@ if __name__ == "__main__":
     test_nested_codex_payload_cwd_selects_runtime_project()
     test_hook_does_not_use_plugin_directory_as_implicit_project()
     test_stop_hook_active_never_blocks_or_consumes_due()
+    test_stop_ignores_fake_active_flag_in_tool_response()
     test_hook_outputs_only_use_codex_wire_keys()
     test_ready_attention_surfaces_ready_clusters_without_mutating_ledger()
     test_ready_attention_pending_gate_takes_priority()

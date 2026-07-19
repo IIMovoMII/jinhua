@@ -27,6 +27,7 @@ Jinhua 是“精简 Skill + 单文件标准库 CLI + 薄宿主触发适配”。
 - 保持全局普通阈值和快速路径。
 - 保持 `project_rule -> skill_patch -> personal_global_skill` 的落点语义。
 - Hook 只能分类、计数、提醒、读取 ready/pending 状态和同轮去重；不得迁移核心数据、写 signals/proposals 或修改文件。
+- Hook 判断执行事实时只信任宿主权威控制字段；不得从用户文本、文档、工具输出、错误日志或任意嵌套文本推断，未知 payload 不得改变调用保护状态。
 - CLI apply 只记录已经由宿主原生工具完成并验证的修改，不写目标文件。
 - 不新增第二套经验账本、后台 daemon、外部数据库、向量库、图数据库或多智能体流程。
 

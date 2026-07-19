@@ -31,12 +31,18 @@ python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
 
 wrapper 按以下顺序定位目标项目：
 
-1. Hook payload 中明确的项目路径；
-2. 常见嵌套 payload 字段；
+1. Hook payload 中有文档定义的顶层项目路径；
+2. 明确支持的宿主包装路径，例如 `event.context.cwd`；
 3. 支持的项目目录环境变量；
 4. Hook 进程当前目录。
 
 输入可以带 UTF-8 BOM。如果最后只能解析到已安装的 Jinhua 插件目录，Hook 会禁用运行态写入，不会把 `.jinhua` 错写进插件。
+
+## Hook 权威证据
+
+执行事实和 Hook 身份只从宿主有文档定义、且 Jinhua 明确支持的控制字段读取。Codex 和 Claude Code 会把 `session_id`、`turn_id` 或 `prompt_id`、`cwd`、`stop_hook_active`、`tool_name`、`tool_input.command` 等字段作为控制数据传入。
+
+Jinhua 不会从用户输入、文档、工具输出、错误日志或任意嵌套文本推断“命令已执行”、项目身份、会话身份、回合身份或 Stop 递归状态。文本里提到命令不等于命令真的执行；只有命令证据和会话/回合身份都来自权威字段时才写调用保护状态。遇到未知或字段不完整的 payload 时，运行态保持不变；只有新增明确字段映射和回归测试后才支持该结构。
 
 ## 宿主信任边界
 
@@ -73,7 +79,7 @@ python <jinhua-dir>/scripts/jinhua.py classify-input \
 
 ## 第二道：PostToolUse 调用保护门
 
-`codex-post-tool-use` 识别 `cycle`、`log-signal`、`propose`、`global-cycle`、`global-propose` 等 Jinhua CLI 入口。
+`codex-post-tool-use` 只从受支持 shell 工具的命令输入中识别 `cycle`、`log-signal`、`propose`、`global-cycle`、`global-propose` 等 Jinhua CLI 入口。用户输入、文件内容、搜索表达式、工具输出和非 shell 工具参数里出现这些命令名时一律忽略。
 
 轻量运行态写在：
 
@@ -90,7 +96,7 @@ python <jinhua-dir>/scripts/jinhua.py classify-input \
 - `skip_duplicate`：同轮同原因重复；
 - `block_loop`：同轮多次进入，疑似循环。
 
-Agent 当前轮第一次直接调用始终允许，保护门只拦后续重复路径。
+Agent 当前轮第一次直接调用始终允许。同一轮后续 Jinhua 子命令属于同一次受保护流程，不再新增保护事件；保护门只拦重复触发路径。
 
 ## 第三道：Stop 周期回顾
 

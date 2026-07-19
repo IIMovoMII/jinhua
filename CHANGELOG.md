@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## Unreleased
+
+- Fixed PostToolUse false positives caused by Jinhua command text in README content, user prompts, search expressions, or tool output.
+- Project, session, turn, and Stop-recursion state now comes only from authoritative host fields; unknown payload shapes leave invocation-guard state unchanged.
+- Codex uses `turn_id`, Claude Code also supports `prompt_id`, and multiple Jinhua subcommands in one turn create only one guard event.
+- Added negative tests that distinguish mentioning a command from executing it and reject spoofed `cwd`, session, turn, and `stop_hook_active` fields.
+
 ## 2.0.0 - 2026-07-19
 
 - Slimmed the runtime Skill control plane from 302 lines / 15,415 bytes to a compact rules-and-routing surface while preserving trigger, threshold, placement, and user-gate semantics.

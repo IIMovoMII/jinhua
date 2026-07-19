@@ -2,6 +2,13 @@
 
 > 本文件是中文更新说明；英文辅助版本见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 未发布
+
+- 修复 PostToolUse 把 README、用户输入、搜索表达式或工具输出中的 Jinhua 命令文字误判为真实调用的问题。
+- 项目、会话、回合和 Stop 递归状态只从宿主权威字段读取；未知 payload 不再改变调用保护状态。
+- Codex 使用 `turn_id`、Claude Code 兼容 `prompt_id`；同一回合的多个 Jinhua 子命令只记录一个保护事件。
+- 新增“提到命令”和“执行命令”的反例测试，并覆盖伪造 `cwd`、session、turn 和 `stop_hook_active`。
+
 ## 2.0.0 - 2026-07-19
 
 - 把实际加载的 Skill 控制面从 302 行、15,415 字节精简为只保留硬规则和按需路由的控制文件，同时保留触发、阈值、落点和用户确认语义。

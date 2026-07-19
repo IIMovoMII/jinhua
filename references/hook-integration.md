@@ -29,12 +29,18 @@ Each wrapper forwards stdin to the matching command in `scripts/jinhua.py`.
 
 The wrappers resolve the target project in this order:
 
-1. explicit project path in the Hook payload;
-2. common nested payload fields;
+1. documented top-level project path in the Hook payload;
+2. explicitly supported host-wrapper paths such as `event.context.cwd`;
 3. supported project-directory environment variables;
 4. Hook process working directory.
 
 UTF-8 BOM input is accepted. If the only fallback resolves to the installed Jinhua plugin directory, runtime writes are disabled instead of creating `.jinhua` inside the plugin.
+
+## Authoritative Hook Evidence
+
+Execution facts and Hook identity come only from documented, explicitly supported control fields. Codex and Claude Code expose fields such as `session_id`, `turn_id` or `prompt_id`, `cwd`, `stop_hook_active`, `tool_name`, and `tool_input.command` as control data.
+
+Jinhua never infers execution, project identity, session identity, turn identity, or Stop recursion state from user prompts, documentation, tool responses, error logs, or arbitrary nested payload text. A command being mentioned is not evidence that it ran. Guard writes require both authoritative command evidence and authoritative session/turn identity. Unknown or incomplete payload shapes leave invocation-guard state unchanged until an explicit mapping and regression test are added.
 
 ## Host Trust Boundary
 
@@ -71,7 +77,7 @@ python <jinhua-dir>/scripts/jinhua.py classify-input \
 
 ## Gate 2: PostToolUse Invocation Guard
 
-`codex-post-tool-use` detects Jinhua CLI entries such as `cycle`, `log-signal`, `propose`, `global-cycle`, and `global-propose`.
+`codex-post-tool-use` detects Jinhua CLI entries such as `cycle`, `log-signal`, `propose`, `global-cycle`, and `global-propose` only from supported shell-tool command input. It ignores command names found in prompts, files, search patterns, tool output, and non-shell tool arguments.
 
 It records lightweight runtime state under:
 
@@ -88,7 +94,7 @@ Guard decisions:
 - `skip_duplicate`: the same reason is repeated in the same turn;
 - `block_loop`: repeated entries indicate a loop.
 
-The first direct agent call remains allowed. The guard only prevents later duplicate paths.
+The first direct agent call remains allowed. Later Jinhua subcommands in the same turn belong to the same guarded workflow and do not create extra guard events; the guard only prevents duplicate trigger paths.
 
 ## Gate 3: Stop Periodic Review
 
