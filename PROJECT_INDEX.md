@@ -72,7 +72,7 @@
 
 | 文件/目录 | 职责 |
 | --- | --- |
-| `.codex-plugin/plugin.json` | Codex 插件清单，声明 Skill 和 Hook。 |
+| `.codex-plugin/plugin.json` | Codex 插件元数据和 Skill 入口；Hook 由默认的 `hooks/hooks.json` 自动发现。 |
 | `.agents/plugins/marketplace.json` | Codex personal marketplace 发现入口。 |
 | `.claude-plugin/plugin.json` | Claude Code 插件清单。 |
 | `.claude-plugin/marketplace.json` | Claude Code marketplace 清单。 |
