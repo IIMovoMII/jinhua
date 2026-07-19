@@ -9,8 +9,7 @@
 | Skill 方法论流程 | `SKILL.md` | `references/data-policy.md` |
 | 中文用户说明 | `README.md` | `SKILL.zh-CN.md`、`references/zh-CN/` |
 | 核心账本与闭环 | `scripts/jinhua.py` | `scripts/test_core_loop.py`、`references/cli-usage.md` |
-| Codex 触发层 | `hooks/codex-hooks.json` | `hooks/codex_*.py`、`scripts/test_trigger_layer.py`、`references/hook-integration.md` |
-| Claude Code 适配 | `hooks/hooks.json` | `scripts/test_adapters.py`、`adapters/README.md` |
+| Codex/Claude Code 触发层 | `hooks/hooks.json` | `hooks/codex_*.py`、`scripts/test_trigger_layer.py`、`references/hook-integration.md` |
 | 数据结构与迁移 | `references/runtime-schema.md` | `scripts/test_core_loop.py`、`references/data-policy.md` |
 | 插件发布 | `.codex-plugin/plugin.json` | `.agents/plugins/marketplace.json`、`PROJECT_RULES.md` |
 | 文件归属调整 | `PROJECT_RULES.md` | 本文件、`PROJECT_MAP*.md` |
@@ -42,11 +41,10 @@
 
 | 文件 | 职责 |
 | --- | --- |
-| `hooks/codex-hooks.json` | Codex 三个 command Hook 定义。 |
+| `hooks/hooks.json` | Codex 与 Claude Code 共用的三个 command Hook 定义，也是 manifest 指向的唯一 Hook 入口。 |
 | `hooks/codex_user_prompt_submit.py` | 第一道闸门薄 wrapper。 |
 | `hooks/codex_post_tool_use.py` | 第二道调用保护薄 wrapper。 |
 | `hooks/codex_stop.py` | 第三道固定周期回顾薄 wrapper。 |
-| `hooks/hooks.json` | Claude Code 原生 Hook 适配，复用同一 wrapper。 |
 | `skills/jinhua/SKILL.md` | Codex 插件内薄 Skill 入口，委托给根目录 `SKILL.md`。 |
 | `adapters/README.md` | 各宿主支持范围和边界。 |
 | `adapters/openclaw/openclaw.plugin.json` | OpenClaw 插件包装清单。 |

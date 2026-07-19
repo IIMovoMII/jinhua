@@ -12,6 +12,8 @@ Product shape:
 - Claude Code: native hook adapter using the same Skill and CLI.
 - OpenClaw, Hermes, TRAE, and WorkBuddy: thin host adapters with no change to the core loop.
 
+The Codex plugin trigger layer requires Codex CLI/Desktop runtime `0.144.6` or newer; older versions may not discover the default `hooks/hooks.json`.
+
 Chinese visual guide: [docs/jinhua-logic.html](docs/jinhua-logic.html)
 
 ## Complete Loop
@@ -261,8 +263,8 @@ See [references/runtime-schema.md](references/runtime-schema.md) and [references
 
 | Host | Entry | Scope |
 | --- | --- | --- |
-| Codex | `.codex-plugin/plugin.json` + `hooks/codex-hooks.json` | three trigger gates, Skill, CLI |
-| Claude Code | `.claude-plugin/plugin.json` + `hooks/hooks.json` | native hooks, Skill, CLI |
+| Codex | `.codex-plugin/plugin.json` + `hooks/hooks.json` | three trigger gates, Skill, CLI |
+| Claude Code | `.claude-plugin/plugin.json` + the same `hooks/hooks.json` | native hooks, Skill, CLI |
 | OpenClaw | `adapters/openclaw/` | plugin/Skill wrapper |
 | Hermes | `adapters/hermes/` | Skill wrapper |
 | TRAE | `adapters/trae/` | Skill wrapper |

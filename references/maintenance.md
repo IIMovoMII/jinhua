@@ -9,8 +9,7 @@ For navigation, read `AGENTS.md`, then `PROJECT_RULES.md` and `PROJECT_INDEX.md`
 - `SKILL.md`: active runtime control plane; keep it short.
 - `SKILL.zh-CN.md`: Chinese explanation, not the active control plane.
 - `scripts/jinhua.py`: only CLI and deterministic ledger implementation.
-- `hooks/codex-hooks.json` and `hooks/codex_*.py`: Codex trigger layer.
-- `hooks/hooks.json`: Claude Code adapter reusing the same wrappers.
+- `hooks/hooks.json` and `hooks/codex_*.py`: shared Codex and Claude Code trigger layer using the official default path; do not add a duplicate manifest override.
 - `references/cli-usage.md`: command contract.
 - `references/data-policy.md`: recordability and privacy.
 - `references/runtime-schema.md`: current schemas and migration.
@@ -47,6 +46,12 @@ All accepted signals remain stored. Reject weak or unsafe content before writing
 Hooks may classify correction text, read ready/pending state, count turns, issue a fixed eight-turn review, and write invocation-guard runtime state.
 
 Hooks must not migrate core schemas, log signals, create proposals, record gate outcomes, edit files, or call full `cycle` on every prompt.
+
+## Plugin Validator Compatibility
+
+Keep `.codex-plugin/plugin.json` free of a `hooks` override and use the official `hooks/hooks.json` default. Jinhua requires Codex 0.144.6 or newer for this path. Codex 0.139 does not discover the default plugin Hook file and is not supported by the 2.0 trigger package.
+
+Validate the shared hook contract through `scripts/test_trigger_layer.py`, plugin validation, cachebuster/reinstall, and fresh Codex and Claude Code tasks.
 
 ## Localization
 

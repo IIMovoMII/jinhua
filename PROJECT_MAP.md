@@ -41,7 +41,6 @@ jinhua/
 |-- .agents/plugins/
 |   `-- marketplace.json
 |-- hooks/
-|   |-- codex-hooks.json
 |   |-- hooks.json
 |   |-- codex_user_prompt_submit.py
 |   |-- codex_post_tool_use.py

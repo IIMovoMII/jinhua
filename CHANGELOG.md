@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Unified Codex and Claude Code on the official default `hooks/hooks.json`; removed the duplicate `hooks/codex-hooks.json` and manifest override. This trigger package now requires Codex 0.144.6 or newer.
 - Fixed PostToolUse false positives caused by Jinhua command text in README content, user prompts, search expressions, or tool output.
 - Project, session, turn, and Stop-recursion state now comes only from authoritative host fields; unknown payload shapes leave invocation-guard state unchanged.
 - Codex uses `turn_id`, Claude Code also supports `prompt_id`, and multiple Jinhua subcommands in one turn create only one guard event.

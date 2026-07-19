@@ -1,6 +1,6 @@
 {
   "name": "jinhua",
-  "version": "2.0.0+codex.20260719133707",
+  "version": "2.0.0+codex.20260719145401",
   "description": "Methodology Skill for reusable workflow signals and Skill evolution in coding agents.",
   "author": {
     "name": "IIMovoMII",
@@ -17,7 +17,6 @@
     "productivity"
   ],
   "skills": "./skills/",
-  "hooks": "./hooks/codex-hooks.json",
   "interface": {
     "displayName": "Jinhua",
     "shortDescription": "Turn repeated workflow lessons into gated Skill improvements",

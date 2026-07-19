@@ -295,9 +295,13 @@ def test_periodic_stop_skips_when_jinhua_already_ran() -> None:
         assert state["sessions"][jinhua.hook_session_id(stop_payload)]["periodic_stop_due"] is False
 
 
-def test_codex_hook_config_uses_plugin_root_for_all_events() -> None:
+def test_shared_hook_config_uses_plugin_root_for_all_events() -> None:
     root = Path(jinhua.__file__).resolve().parents[1]
-    config = json.loads((root / "hooks" / "codex-hooks.json").read_text(encoding="utf-8"))
+    config_path = root / "hooks" / "hooks.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert not (root / "hooks" / "codex-hooks.json").exists()
+    manifest = json.loads((root / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert "hooks" not in manifest
     for event, script in {
         "UserPromptSubmit": "codex_user_prompt_submit.py",
         "PostToolUse": "codex_post_tool_use.py",
@@ -306,10 +310,11 @@ def test_codex_hook_config_uses_plugin_root_for_all_events() -> None:
         hook = config["hooks"][event][0]["hooks"][0]
         assert "<jinhua-dir>" not in hook["command"]
         assert hook["command"] == f'python "${{CLAUDE_PLUGIN_ROOT}}/hooks/{script}"'
-        assert hook["commandWindows"] == f'python "${{CLAUDE_PLUGIN_ROOT}}/hooks/{script}"'
+        assert "commandWindows" not in hook
+    assert config["hooks"]["PostToolUse"][0]["matcher"] == "Bash"
     config_text = json.dumps(config).lower()
     assert "output state" not in config_text
-    assert "periodic review" in config_text
+    assert set(config) == {"hooks"}
 
 
 def test_codex_payload_cwd_selects_runtime_project() -> None:
@@ -501,10 +506,11 @@ def test_removed_trigger_commands_are_absent() -> None:
 
 def test_old_hook_is_not_manifest_primary_path() -> None:
     root = Path(jinhua.__file__).resolve().parents[1]
-    codex_manifest = (root / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
+    codex_manifest = json.loads((root / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
     claude_manifest = (root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
-    assert "hooks/codex-hooks.json" in codex_manifest
-    assert "claude-codex-hooks.json" not in codex_manifest
+    assert "hooks" not in codex_manifest
+    assert (root / "hooks" / "hooks.json").is_file()
+    assert not (root / "hooks" / "codex-hooks.json").exists()
     assert "claude-codex-hooks.json" not in claude_manifest
 
 
@@ -522,7 +528,7 @@ if __name__ == "__main__":
     test_stop_does_not_require_or_parse_output_tail()
     test_periodic_stop_is_per_session_and_light()
     test_periodic_stop_skips_when_jinhua_already_ran()
-    test_codex_hook_config_uses_plugin_root_for_all_events()
+    test_shared_hook_config_uses_plugin_root_for_all_events()
     test_codex_payload_cwd_selects_runtime_project()
     test_hook_payload_accepts_utf8_bom()
     test_nested_codex_payload_cwd_selects_runtime_project()

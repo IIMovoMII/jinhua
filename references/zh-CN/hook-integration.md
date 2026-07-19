@@ -17,7 +17,7 @@ PostToolUse      -> 调用保护门记录
 Stop             -> 固定每 8 轮回顾 + 防循环
 ```
 
-`hooks/codex-hooks.json` 调用：
+共享文件 `hooks/hooks.json` 调用：
 
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
@@ -26,6 +26,7 @@ python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
 ```
 
 三个 wrapper 都把 stdin 原样转发给 `scripts/jinhua.py` 中对应命令。
+Codex manifest 不再重复声明 `hooks` 路径，由 Codex 自动发现这份官方默认文件。该目录结构要求 Codex 0.144.6 或更高版本；Claude Code 也使用同一个文件。
 
 ## 项目根目录解析
 
@@ -130,7 +131,7 @@ Hook 自身不会把 `ready` 改成 `proposed`。
 
 ## Claude Code
 
-`hooks/hooks.json` 是 Claude Code 插件适配。它使用同一组三个 wrapper 和 `${CLAUDE_PLUGIN_ROOT}`，没有第二套触发逻辑或账本。
+`hooks/hooks.json` 是 Codex 与 Claude Code 共用的插件 Hook 入口。它使用同一组三个 wrapper 和 `${CLAUDE_PLUGIN_ROOT}`，没有第二套触发逻辑、Hook 清单或账本。
 
 `scripts/test_adapters.py` 和 `scripts/test_trigger_layer.py` 负责本地协议模拟。
 

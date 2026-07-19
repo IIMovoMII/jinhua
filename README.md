@@ -12,6 +12,8 @@ Jinhua 是一个面向编程智能体（Agent）的本地方法经验沉淀工�
 - Claude Code：原生 Hook 适配 + 同一套 Skill/CLI。
 - OpenClaw、Hermes、TRAE、WorkBuddy：轻量宿主包装，核心闭环不变。
 
+Codex 插件触发层要求 Codex CLI / Desktop 内核 `0.144.6` 或更高版本；旧版可能无法发现默认的 `hooks/hooks.json`。
+
 中文逻辑图：[docs/jinhua-logic.html](docs/jinhua-logic.html)
 
 ## 完整闭环
@@ -267,8 +269,8 @@ Jinhua 2.0 的本地 schema 是 `3.0`，全局 schema 是 `2.0`。第一次运�
 
 | 宿主 | 入口 | 能力 |
 | --- | --- | --- |
-| Codex | `.codex-plugin/plugin.json` + `hooks/codex-hooks.json` | 三道触发闸门、Skill、CLI |
-| Claude Code | `.claude-plugin/plugin.json` + `hooks/hooks.json` | 原生 Hook 适配、Skill、CLI |
+| Codex | `.codex-plugin/plugin.json` + `hooks/hooks.json` | 三道触发闸门、Skill、CLI |
+| Claude Code | `.claude-plugin/plugin.json` + 同一 `hooks/hooks.json` | 原生 Hook、Skill、CLI |
 | OpenClaw | `adapters/openclaw/` | 插件/Skill 包装 |
 | Hermes | `adapters/hermes/` | Skill 包装 |
 | TRAE | `adapters/trae/` | Skill 包装 |

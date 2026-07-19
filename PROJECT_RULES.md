@@ -7,8 +7,7 @@ Jinhua 是“精简 Skill + 单文件标准库 CLI + 薄宿主触发适配”。
 - `SKILL.md`：英文 active control plane，定义 Skill 被选中后的流程。
 - `SKILL.zh-CN.md`：中文解释，不替代控制面。
 - `scripts/jinhua.py`：唯一 CLI，包含确定性核心账本和触发层命令；两者必须保持边界。
-- `hooks/codex-hooks.json`、`hooks/codex_*.py`：Codex 三道触发闸门。
-- `hooks/hooks.json`：Claude Code 薄适配，复用同一 wrapper。
+- `hooks/hooks.json`、`hooks/codex_*.py`：Codex 与 Claude Code 共用的三道触发闸门。
 - `references/`：CLI、数据政策、运行态 schema、Hook 和维护规则。
 - `adapters/`：其他宿主包装，不改变核心闭环。
 - `PROJECT_INDEX.md`：逐文件导航；`PROJECT_MAP*.md`：产品形态和目录概览。
@@ -28,6 +27,7 @@ Jinhua 是“精简 Skill + 单文件标准库 CLI + 薄宿主触发适配”。
 - 保持 `project_rule -> skill_patch -> personal_global_skill` 的落点语义。
 - Hook 只能分类、计数、提醒、读取 ready/pending 状态和同轮去重；不得迁移核心数据、写 signals/proposals 或修改文件。
 - Hook 判断执行事实时只信任宿主权威控制字段；不得从用户文本、文档、工具输出、错误日志或任意嵌套文本推断，未知 payload 不得改变调用保护状态。
+- 插件只维护一份默认 `hooks/hooks.json`，manifest 不写重复路径；Codex 最低支持 0.144.6。
 - CLI apply 只记录已经由宿主原生工具完成并验证的修改，不写目标文件。
 - 不新增第二套经验账本、后台 daemon、外部数据库、向量库、图数据库或多智能体流程。
 

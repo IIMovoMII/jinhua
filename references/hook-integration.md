@@ -15,7 +15,7 @@ PostToolUse      -> invocation guard record
 Stop             -> fixed eight-turn periodic review + loop prevention
 ```
 
-`hooks/codex-hooks.json` invokes:
+The shared `hooks/hooks.json` invokes:
 
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py"
@@ -24,6 +24,7 @@ python "${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py"
 ```
 
 Each wrapper forwards stdin to the matching command in `scripts/jinhua.py`.
+The Codex manifest omits a redundant `hooks` override, so Codex discovers this official default path. Jinhua requires Codex 0.144.6 or newer for this package layout. The same file is also the Claude Code plugin hook entry.
 
 ## Project Root Resolution
 
@@ -128,7 +129,7 @@ The Hook itself never changes `ready` to `proposed`.
 
 ## Claude Code
 
-`hooks/hooks.json` is the Claude Code plugin adapter. It uses the same three wrapper scripts and `${CLAUDE_PLUGIN_ROOT}`; no second trigger implementation or ledger exists.
+`hooks/hooks.json` is the shared Codex and Claude Code plugin hook entry. It uses the same three wrapper scripts and `${CLAUDE_PLUGIN_ROOT}`; no second trigger implementation, hook file, or ledger exists.
 
 Payload compatibility is checked through local protocol simulations in `scripts/test_adapters.py` and `scripts/test_trigger_layer.py`.
 

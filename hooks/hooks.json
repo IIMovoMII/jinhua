@@ -1,5 +1,4 @@
 {
-  "description": "Claude Code hook adapter for jinhua. Reuses the same lightweight trigger layer and never writes signals or proposals from hooks.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -7,7 +6,8 @@
           {
             "type": "command",
             "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/codex_user_prompt_submit.py\"",
-            "timeout": 5
+            "timeout": 5,
+            "statusMessage": "Checking jinhua correction gate"
           }
         ]
       }
@@ -19,7 +19,8 @@
           {
             "type": "command",
             "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/codex_post_tool_use.py\"",
-            "timeout": 5
+            "timeout": 5,
+            "statusMessage": "Updating jinhua invocation guard"
           }
         ]
       }
@@ -30,7 +31,8 @@
           {
             "type": "command",
             "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/codex_stop.py\"",
-            "timeout": 5
+            "timeout": 5,
+            "statusMessage": "Checking jinhua periodic review"
           }
         ]
       }

@@ -11,8 +11,7 @@ Jinhua 的稳定形态是：精简 Skill、单文件标准库 CLI、薄宿主触
 - `SKILL.md`：实际运行控制面，保持简短。
 - `SKILL.zh-CN.md`：中文说明，不替代控制面。
 - `scripts/jinhua.py`：唯一 CLI 和确定性账本实现。
-- `hooks/codex-hooks.json`、`hooks/codex_*.py`：Codex 触发层。
-- `hooks/hooks.json`：复用同一 wrapper 的 Claude Code 适配。
+- `hooks/hooks.json`、`hooks/codex_*.py`：Codex 与 Claude Code 共用的触发层，使用官方默认路径；不要增加重复的 manifest 覆盖字段。
 - `references/cli-usage.md`：命令契约。
 - `references/data-policy.md`：记录和隐私边界。
 - `references/runtime-schema.md`：当前结构与迁移。
@@ -49,6 +48,12 @@ CLI 不能：
 Hook 可以做本地纠错分类、读取就绪/待确认状态、统计回合、固定每 8 轮提醒，以及写调用保护运行态。
 
 Hook 不能迁移核心 schema、写信号、创建提案、记录确认结果、修改文件，也不能每条消息都跑完整 `cycle`。
+
+## 插件校验器兼容
+
+`.codex-plugin/plugin.json` 不写 `hooks` 覆盖字段，统一使用官方默认 `hooks/hooks.json`。Jinhua 对这条路径的 Codex 最低版本要求是 0.144.6。Codex 0.139 不会发现默认插件 Hook 文件，不属于 2.0 触发包的支持范围。
+
+共享 Hook 契约由 `scripts/test_trigger_layer.py`、插件校验、cachebuster/reinstall，以及全新 Codex 和 Claude Code 任务共同验证。
 
 ## 中文与英文
 

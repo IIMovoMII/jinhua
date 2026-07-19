@@ -4,6 +4,7 @@
 
 ## 未发布
 
+- Codex 与 Claude Code 统一使用官方默认 `hooks/hooks.json`，删除重复的 `hooks/codex-hooks.json` 和 manifest 覆盖字段；该触发包要求 Codex 0.144.6 或更高版本。
 - 修复 PostToolUse 把 README、用户输入、搜索表达式或工具输出中的 Jinhua 命令文字误判为真实调用的问题。
 - 项目、会话、回合和 Stop 递归状态只从宿主权威字段读取；未知 payload 不再改变调用保护状态。
 - Codex 使用 `turn_id`、Claude Code 兼容 `prompt_id`；同一回合的多个 Jinhua 子命令只记录一个保护事件。
