@@ -470,7 +470,7 @@
           </article>
           <article class="branch warn">
             <h3>本地就绪条件（ready）</h3>
-            <p>同一聚类（cluster）至少 3 条活跃信号（active signals），或强度总和达到 5。明确沉淀要求或紧急高成本失败只能通过 <code>log-signal --immediate</code> 进入即时通道。</p>
+            <p>同一项目同类信号达到 2 条时，不看强度，先进入“仅项目规则就绪”，只能提议写入当前项目。达到 3 条信号或强度总和 5 后，恢复完整落点判断。<code>log-signal --immediate</code> 仍是唯一即时通道。</p>
           </article>
           <article class="branch">
             <h3>提案路径</h3>
@@ -480,7 +480,7 @@
         <div class="branches">
           <article class="branch">
             <h3>选择落点（Placement）</h3>
-            <p>用户可以选择项目规则、增强已有 Skill 或个人全局 Skill。选择后，Agent 先用宿主原生工具修改并验证目标，成功后 apply 命令才记录采纳；CLI 本身不写目标文件。</p>
+            <p>完整就绪时，用户可以选择项目规则、增强已有 Skill 或个人全局 Skill；两条同项目信号触发的提案只提供项目规则、拒绝和修订。选择后，Agent 先用宿主原生工具修改并验证目标，成功后 apply 命令才记录采纳。</p>
           </article>
           <article class="branch warn">
             <h3>拒绝（No）</h3>
@@ -509,7 +509,7 @@
           <div>
             <article class="node">
               <h3>项目本地：<code>.jinhua/data/</code></h3>
-              <p>保存当前项目的原始信号（raw signals）、聚类状态（cluster-state）、提案记录（proposals）、已采纳修改（adopted edits）和已拒绝提案（rejected proposals）。原始证据留在项目内。</p>
+              <p>保存当前项目的原始信号（raw signals）、聚类状态（cluster-state）、提案记录（proposals）、已采纳修改（adopted edits）和已拒绝提案（rejected proposals）。采纳项目规则不会清零或停用原信号。</p>
             </article>
             <article class="node">
               <h3>技能全局层（Skill global layer）：<code>&lt;jinhua-dir&gt;/global-data/</code></h3>
@@ -536,11 +536,11 @@
         </article>
         <article class="metric">
           <strong style="color: var(--green);">项目</strong>
-          <p>默认需要 3 个不同项目的证据，避免把单项目偏好误当成通用方法。</p>
+          <p>至少需要 2 个不同项目。B 项目两条证据先形成项目规则后，C 项目再出现一条同类证据，仍可把三条证据合并为全局就绪。</p>
         </article>
         <article class="metric">
           <strong style="color: var(--amber);">强度</strong>
-          <p>默认需要 5 条证据且强度总和达到 7；快速路径也至少需要 2 个项目和强证据。</p>
+          <p>普通路径仍是 3 个项目、5 条证据、强度 7；新增的跨项目重复路径只要求至少 2 个项目和 3 条证据，不看强度；原强证据快速路径继续保留。</p>
         </article>
         <article class="metric">
           <strong style="color: var(--coral);">门控</strong>

@@ -47,6 +47,8 @@ If safe sanitization is not possible, do not record.
 
 Project-local `.jinhua/data/` may keep richer signal cards and evidence ids.
 
+A project-rule adoption changes proposal/cluster state only. It does not consume, reset, or deactivate the underlying signals. Those active signals may still be imported once as compressed global evidence; global readiness still requires evidence from at least two distinct project hashes.
+
 Global `global-data/` may keep only:
 
 - hashed project identity;

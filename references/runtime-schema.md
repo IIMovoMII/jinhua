@@ -40,12 +40,12 @@ Schema version: `3.0`.
     "verification_path:verify_before_claiming": {
       "cluster_key": "verification_path:verify_before_claiming",
       "operator": "verification_path",
-      "signal_count": 3,
-      "strength_sum": 5,
+      "signal_count": 2,
+      "strength_sum": 2,
       "sample_signal_ids": ["sig_..."],
       "last_seen": "2026-07-19T00:00:00Z",
       "status": "ready",
-      "ready_reason": "signal_count >= 3",
+      "ready_reason": "project-only repeat: signal_count >= 2",
       "cooldown_signal_remaining": 0
     }
   },
@@ -54,6 +54,8 @@ Schema version: `3.0`.
 ```
 
 Cluster statuses: `active`, `ready`, `proposed`, `adopted`, `cooldown`.
+
+Local readiness has two levels without changing schema version: 2 same-project signals produce project-only readiness; 3 signals, total strength 5, or `--immediate` produce full local readiness. Non-Hook core commands reconcile existing active clusters idempotently, so old records remain valid and can become ready without signal rewrites.
 
 ### proposals.jsonl
 
@@ -65,6 +67,8 @@ Required fields:
 - `placement`, `placement_reason`
 - `target`, `patch`, `risk`
 - `status`, `user_gate`
+
+New project-only proposals also store `project_only: true`; their placement and gate are limited to `project_rule`, `No`, and `Revision`. Older proposals without the field use the normal placement ladder.
 
 Placement-specific fields:
 
@@ -124,6 +128,8 @@ Raw project paths and original user messages are not promoted.
 Schema version: `2.0`.
 
 Each fingerprint stores evidence count, strength sum, unique project hashes, sample ids, summary/signature samples, source-type counts, correction/high-strength counts, readiness state, and `cooldown_signal_remaining`.
+
+Readiness is the union of: 3 projects + 5 evidence + strength 7; 2 projects + 3 evidence regardless of strength; or the strong-evidence fast path of 2 projects + strength 6 plus repeated high-strength/user-correction evidence. Core global commands also reconcile existing active clusters against these rules.
 
 ### global-proposals.jsonl
 

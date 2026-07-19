@@ -70,7 +70,7 @@ Jinhua 的命令、参数、JSON 字段、operator id 和 placement id 必须保
 | 状态 | 中文理解 |
 | --- | --- |
 | `active` | 正在积累证据。 |
-| `ready` | 达到提案阈值，但还没有改变规则。 |
+| `ready` | 达到提案阈值，但还没有改变规则；两条同项目信号时可能只是“仅项目规则就绪”。 |
 | `proposed` | 已创建提案。 |
 | `pending_user_gate` | 正在等待用户选择落点、拒绝或修订。 |
 | `needs_revision` | 用户要求修改提案后重新确认。 |
@@ -105,6 +105,7 @@ Jinhua 的命令、参数、JSON 字段、operator id 和 placement id 必须保
 | `project_hash` | 项目身份哈希。 |
 | `identity_source` | 项目身份来自 explicit、env、git remote 或 path。 |
 | `user_gate` | 带落点的用户确认门。 |
+| `project_only` | 该本地提案是否由两条同项目信号解锁并被硬限制为 `project_rule`。 |
 | `cooldown_signal_remaining` | 还需要多少条新的同类信号才能解除冷却。 |
 | `applied_target` | 实际完成修改的目标。 |
 | `edit_summary` | 已验证修改的简短摘要。 |

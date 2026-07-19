@@ -118,17 +118,23 @@ The agent owns semantic judgment and abstraction. The CLI only validates, stores
 - `2`: clear user correction or repeated pattern.
 - `3`: high-cost failure, repeated rework, or explicit crystallization request.
 
-A local cluster becomes ready at:
+Local readiness has two levels:
 
 ```text
-signal_count >= 3
-or
-strength_sum >= 5
+2 same-project signals
+→ project-only readiness, regardless of strength; project_rule only
+
+3 signals or strength_sum >= 5
+→ full local readiness under the existing placement ladder
 ```
 
 `log-signal --immediate` is the only immediate channel and is reserved for an explicit crystallization request or urgent reusable high-cost failure.
 
-Ready means evidence is sufficient for a proposal, not that a rule has changed. The next ready-attention check brings it back to the agent, which must create a complete proposal or state a concrete skip reason.
+Ready means evidence is sufficient for a proposal, not that a rule has changed. A two-signal proposal is limited to the current project; the original placement ladder returns only after the full threshold is met. The next ready-attention check brings it back to the agent, which must create a complete proposal or state a concrete skip reason.
+
+Adopting a project rule does not reset, delete, or deactivate its signals. Their compressed copies remain eligible for later cross-project accumulation.
+
+Core commands such as `cycle` idempotently reconcile existing active clusters against current thresholds, so historical signals do not need to be logged again.
 
 ## Cross-Project Promotion
 
@@ -141,6 +147,15 @@ Ordinary global readiness:
 ```text
 3 projects + 5 evidence records + strength 7
 ```
+
+Cross-project repeat path:
+
+```text
+at least 2 projects + 3 evidence records
+no strength requirement
+```
+
+For example, two records in project B may first become a project rule; one matching record in project C still makes the three records globally ready, subject to a proposal and user confirmation.
 
 Fast path:
 
@@ -168,6 +183,8 @@ In Chinese conversations the user gate is:
 拒绝(No)
 修订(Revision)
 ```
+
+A two-signal project-only proposal shows only `项目规则(project_rule)`, `拒绝(No)`, and `修订(Revision)`.
 
 Every proposal requires a concrete target, a complete Markdown patch with a heading, a concrete risk, representative evidence, placement, and placement reason. Placeholders cannot enter the user gate.
 

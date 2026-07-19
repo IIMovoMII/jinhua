@@ -110,6 +110,7 @@ Both directories are ignored and must never be packaged or committed.
 - Do not bypass the placement-aware user gate.
 - Do not record adoption before native editing and verification succeed.
 - Do not count same-project repetition as cross-project repetition.
+- Do not consume or deactivate local signals after project-rule adoption; global promotion remains an independent evidence path.
 - Do not ask the user to find a target Skill or project rule file.
 - Do not add fuzzy merge, compaction, operator promotion, daemon, database, vector store, dashboard, or a second ledger.
 - Keep host-specific packaging under `adapters/`.

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added two-level local readiness: two matching signals in one project unlock only a current-project rule regardless of strength, while the existing three-signal or strength-five threshold retains the full placement ladder.
+- Added a cross-project repeat path: three matching records across at least two projects become globally ready without a strength requirement; the ordinary and strong-evidence fast paths remain intact.
+- Clarified and enforced that project-rule adoption does not consume evidence: local signals remain active for one-time global import, so early project crystallization cannot block later global promotion.
+- Added a `project_only` constraint and reduced user gate for two-signal proposals so they cannot jump directly to a Skill placement.
+- Made non-Hook core commands idempotently reconcile historical active clusters so existing evidence adopts the new thresholds without migration, reset, or re-logging.
+- Made `cycle` surface the gate attached to each ready cluster instead of advertising the full five-choice gate for project-only readiness.
 - Moved the fixed eight-turn third-gate review from Codex's user-visible Stop `HookPrompt` path to `UserPromptSubmit.additionalContext`; all three logical gates remain, with no extra continuation or visible internal prompt.
 - Removed `codex-stop`, the Stop wrapper, the Stop hook entry, and periodic tickets; the next input Hook cleans obsolete trigger-runtime fields.
 - Unified Codex and Claude Code on the official default `hooks/hooks.json`; removed the duplicate `hooks/codex-hooks.json` and manifest override. This trigger package now requires Codex 0.144.6 or newer.

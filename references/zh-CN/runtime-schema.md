@@ -42,12 +42,12 @@ schema 版本是 `3.0`。
     "verification_path:verify_before_claiming": {
       "cluster_key": "verification_path:verify_before_claiming",
       "operator": "verification_path",
-      "signal_count": 3,
-      "strength_sum": 5,
+      "signal_count": 2,
+      "strength_sum": 2,
       "sample_signal_ids": ["sig_..."],
       "last_seen": "2026-07-19T00:00:00Z",
       "status": "ready",
-      "ready_reason": "signal_count >= 3",
+      "ready_reason": "project-only repeat: signal_count >= 2",
       "cooldown_signal_remaining": 0
     }
   },
@@ -56,6 +56,8 @@ schema 版本是 `3.0`。
 ```
 
 聚类状态包括 `active`、`ready`、`proposed`、`adopted`、`cooldown`。
+
+本地就绪分两级，但不需要升级 schema：同项目 2 条信号产生“仅项目规则就绪”；3 条信号、总强度 5 或 `--immediate` 产生完整本地就绪。非 Hook 核心命令会幂等重算已有活跃聚类，因此旧记录无需重写也能按新规则就绪。
 
 ### proposals.jsonl
 
@@ -67,6 +69,8 @@ schema 版本是 `3.0`。
 - `placement`、`placement_reason`
 - `target`、`patch`、`risk`
 - `status`、`user_gate`
+
+两条同项目信号触发的新提案还会保存 `project_only: true`，落点和确认门只允许 `project_rule`、拒绝、修订。旧提案没有该字段时继续使用正常落点阶梯。
 
 不同落点还需要：
 
@@ -115,6 +119,8 @@ schema 版本是 `3.0`。保存最后提案 ID、信号总数、采纳数、拒�
 ### global-clusters.json
 
 schema 版本是 `2.0`。每个方法指纹保存证据数、总强度、不同项目哈希、样本 ID、来源统计、纠正/高强度计数、就绪状态和剩余冷却信号数。
+
+全局就绪是三条路径的并集：3 个项目 + 5 条证据 + 总强度 7；至少 2 个项目 + 3 条证据且不要求强度；或 2 个项目 + 总强度 6 并有重复强证据/用户纠正的快速路径。全局核心命令也会按这些规则重算已有活跃聚类。
 
 ### global-proposals.jsonl
 

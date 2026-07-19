@@ -53,7 +53,9 @@ Strength is fixed:
 
 Use `log-signal --immediate` only for an explicit crystallization request or an urgent reusable high-cost failure.
 
-A local cluster becomes ready at 3 signals or total strength 5. Same-project readiness is enough for a local proposal; do not wait for cross-project evidence.
+At 2 same-project signals, ignore strength and allow only a `project_rule`; its proposal and applied target must stay inside the current project. At 3 signals or total strength 5, use the normal placement ladder.
+
+Local adoption leaves signals active for global import. Non-Hook core commands recheck historical active clusters against current thresholds without rewriting signals.
 
 The model chooses the reusable abstraction, operator, `cluster_key`, strength, and placement. The CLI only validates, stores, counts, clusters, migrates, and records gate outcomes. Read [references/data-policy.md](references/data-policy.md) before changing recordability or privacy rules.
 
@@ -90,6 +92,8 @@ Show the gate in the user's current language. For Chinese users:
 修订(Revision)
 ```
 
+For two-signal project-only readiness, show only `项目规则(project_rule)`, `拒绝(No)`, and `修订(Revision)`.
+
 Choosing a placement accepts that placement. `Revision` records feedback, rewrites the proposal, and asks the same gate again. `No` puts the cluster into cooldown until 5 new same-cluster signals arrive.
 
 If the user selects a different placement, revise the proposal first so its owner, target, patch, and risk match that placement.
@@ -111,6 +115,7 @@ Global grouping uses a stable method fingerprint, preferably normalized `operato
 Global readiness is:
 
 - 3 unique projects, 5 evidence records, and total strength 7; or
+- cross-project repeat path: 2 unique projects and 3 evidence records, regardless of strength; or
 - fast path: 2 unique projects, total strength 6, plus at least 2 high-strength or user-correction records.
 
 Global proposals use only `skill_patch` or `personal_global_skill` and always pass through the user gate.

@@ -97,17 +97,40 @@ def test_initialization_and_local_thresholds() -> None:
         assert not (data / "crystallized-operators.jsonl").exists()
 
         count_key = "verification_path:count_threshold"
-        for _ in range(2):
-            log_signal(root, count_key, 1)
-            assert cluster(root, count_key)["status"] == "active"
+        log_signal(root, count_key, 1)
+        assert cluster(root, count_key)["status"] == "active"
         log_signal(root, count_key, 1)
         assert cluster(root, count_key)["status"] == "ready"
+        assert "project-only repeat" in cluster(root, count_key)["ready_reason"]
+        count_signals = jinhua.find_signals_for_cluster(args_for(root), count_key)
+        count_skeleton = jinhua.local_proposal_skeleton(cluster(root, count_key), count_signals, args_for(root))
+        assert count_skeleton["project_only"] is True
+        assert count_skeleton["placement_hint"] == "project_rule"
+        historical_state = jinhua.read_cluster_state(args_for(root))
+        historical_state["clusters"][count_key]["status"] = "active"
+        historical_state["clusters"][count_key]["ready_reason"] = ""
+        jinhua.write_cluster_state(args_for(root), historical_state)
+        cycle_result = run_cli(root, "cycle", "--no-global")
+        assert cluster(root, count_key)["status"] == "ready"
+        assert "project-only repeat" in cluster(root, count_key)["ready_reason"]
+        assert "user_gate: 项目规则(project_rule) / 拒绝(No) / 修订(Revision)" in cycle_result.stdout
+        assert "show that cluster's user_gate" in cycle_result.stdout
+        log_signal(root, count_key, 1)
+        assert cluster(root, count_key)["status"] == "ready"
+        assert cluster(root, count_key)["ready_reason"] == "signal_count >= 3"
+        count_signals = jinhua.find_signals_for_cluster(args_for(root), count_key)
+        count_skeleton = jinhua.local_proposal_skeleton(cluster(root, count_key), count_signals, args_for(root))
+        assert count_skeleton["project_only"] is False
 
         strength_key = "verification_path:strength_threshold"
         log_signal(root, strength_key, 3)
         log_signal(root, strength_key, 2)
         assert cluster(root, strength_key)["signal_count"] == 2
         assert cluster(root, strength_key)["status"] == "ready"
+        strength_signals = jinhua.find_signals_for_cluster(args_for(root), strength_key)
+        assert jinhua.local_proposal_skeleton(
+            cluster(root, strength_key), strength_signals, args_for(root)
+        )["project_only"] is False
 
         immediate_key = "verification_path:immediate_threshold"
         log_signal(root, immediate_key, 1, immediate=True)
@@ -118,8 +141,42 @@ def test_complete_proposal_apply_revision_and_cooldown() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         key = "constraint_recognition:project_rule_flow"
-        for _ in range(3):
+        for _ in range(2):
             log_signal(root, key, 1)
+
+        broad_placement = run_cli(
+            root,
+            "propose",
+            "--cluster-key",
+            key,
+            "--placement",
+            "personal_global_skill",
+            "--target",
+            "global-skill/SKILL.md",
+            "--patch",
+            "## Verify First\n\nVerify before claiming success.",
+            "--risk",
+            "May add unnecessary checks to trivial edits.",
+            expect=1,
+        )
+        assert "ready only for a current-project rule" in broad_placement.stderr
+
+        wrong_target = run_cli(
+            root,
+            "propose",
+            "--cluster-key",
+            key,
+            "--placement",
+            "project_rule",
+            "--target",
+            "outside/SKILL.md",
+            "--patch",
+            "## Verify First\n\nVerify before claiming success.",
+            "--risk",
+            "May add unnecessary checks to trivial edits.",
+            expect=1,
+        )
+        assert "recommended current-project rule file" in wrong_target.stderr
 
         incomplete = run_cli(
             root,
@@ -155,6 +212,8 @@ def test_complete_proposal_apply_revision_and_cooldown() -> None:
         proposal_id = proposals[-1]["id"]
         assert proposals[-1]["status"] == "pending_user_gate"
         assert "decision" not in proposals[-1]
+        assert proposals[-1]["project_only"] is True
+        assert "skill_patch" not in proposals[-1]["user_gate"]
 
         changed_placement = run_cli(
             root,
@@ -169,7 +228,22 @@ def test_complete_proposal_apply_revision_and_cooldown() -> None:
             "Should not be recorded without a concrete Skill recommendation.",
             expect=1,
         )
-        assert "revise the proposal first" in changed_placement.stderr
+        assert "limited to project_rule" in changed_placement.stderr
+
+        outside_apply = run_cli(
+            root,
+            "apply-proposal",
+            "--proposal-id",
+            proposal_id,
+            "--placement",
+            "project_rule",
+            "--applied-target",
+            str(root.parent / "outside-agents.md"),
+            "--summary",
+            "Should not be recorded outside the current project.",
+            expect=1,
+        )
+        assert "inside the current project root" in outside_apply.stderr
 
         target = root / "AGENTS.md"
         target.write_text("# Rules\n", encoding="utf-8")
@@ -191,6 +265,7 @@ def test_complete_proposal_apply_revision_and_cooldown() -> None:
         assert adopted["applied_target"] == str(target)
         assert "applied_path" not in adopted
         assert cluster(root, key)["status"] == "adopted"
+        assert all(signal["status"] == "active" for signal in jinhua.read_jsonl(data / "signals.jsonl")[:2])
 
         reject_key = "constraint_recognition:revision_and_cooldown"
         log_signal(root, reject_key, 1, immediate=True)
@@ -330,6 +405,75 @@ def test_global_thresholds_identity_and_dedupe() -> None:
         fast = next(iter(json.loads((fast_global / "global-clusters.json").read_text(encoding="utf-8"))["clusters"].values()))
         assert fast["status"] == "ready"
         assert "fast path" in fast["ready_reason"]
+
+
+def test_project_rule_adoption_preserves_cross_project_promotion() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        global_root = base / "global"
+        action = "keep project-local adoption independent from cross-project evidence"
+        project_b = populate_global_project(global_root, "project-b", [1, 1], action)
+        local_key = "verification_path:shared_global_method"
+        assert cluster(project_b, local_key)["status"] == "ready"
+
+        run_cli(
+            project_b,
+            "propose",
+            "--cluster-key",
+            local_key,
+            "--placement",
+            "project_rule",
+            "--target",
+            "AGENTS.md",
+            "--patch",
+            "## Preserve Evidence\n\nKeep project-local adoption independent from global evidence accumulation.",
+            "--risk",
+            "The rule may be unnecessary outside this project.",
+            global_root=global_root,
+            project_id="project-b",
+        )
+        proposal = jinhua.read_jsonl(project_b / ".jinhua" / "data" / "proposals.jsonl")[-1]
+        applied_target = project_b / "AGENTS.md"
+        applied_target.write_text("# Rules\n", encoding="utf-8")
+        run_cli(
+            project_b,
+            "apply-proposal",
+            "--proposal-id",
+            proposal["id"],
+            "--placement",
+            "project_rule",
+            "--applied-target",
+            str(applied_target),
+            "--summary",
+            "Recorded the verified project-only rule.",
+            global_root=global_root,
+            project_id="project-b",
+        )
+        local_signals = jinhua.read_jsonl(project_b / ".jinhua" / "data" / "signals.jsonl")
+        assert len(local_signals) == 2
+        assert all(signal["status"] == "active" for signal in local_signals)
+
+        populate_global_project(global_root, "project-c", [1], action)
+        global_clusters = json.loads((global_root / "global-clusters.json").read_text(encoding="utf-8"))["clusters"]
+        method = next(iter(global_clusters.values()))
+        assert method["status"] == "ready"
+        assert method["evidence_count"] == 3
+        assert method["strength_sum"] == 3
+        assert len(method["project_hashes"]) == 2
+        assert "cross-project repeat path" in method["ready_reason"]
+
+        method["status"] = "active"
+        method["ready_reason"] = ""
+        jinhua.write_json(global_root / "global-clusters.json", {
+            "schema_version": "2.0",
+            "clusters": global_clusters,
+            "updated_at": "",
+        })
+        project_c = base / "project-c"
+        run_cli(project_c, "cycle", global_root=global_root, project_id="project-c")
+        reconciled = next(iter(json.loads((global_root / "global-clusters.json").read_text(encoding="utf-8"))["clusters"].values()))
+        assert reconciled["status"] == "ready"
+        assert "cross-project repeat path" in reconciled["ready_reason"]
 
 
 def write_old_local_runtime(root: Path, malformed: bool = False) -> Namespace:
@@ -524,6 +668,7 @@ if __name__ == "__main__":
     test_initialization_and_local_thresholds()
     test_complete_proposal_apply_revision_and_cooldown()
     test_global_thresholds_identity_and_dedupe()
+    test_project_rule_adoption_preserves_cross_project_promotion()
     test_schema_migration_is_clean_and_idempotent()
     test_malformed_migration_does_not_rewrite_files()
     test_removed_public_interfaces_are_absent()

@@ -10,7 +10,7 @@
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 ```
 
-`cycle` 会初始化或迁移本地运行态、汇总本地状态、把压缩后的有效信号导入全局层，并显示待确认门或就绪提案骨架。
+`cycle` 会初始化或迁移本地运行态、按当前阈值重算历史活跃聚类、汇总本地状态、把压缩后的有效信号导入全局层，并显示待确认门或就绪提案骨架。
 
 常用选项：
 
@@ -55,6 +55,8 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> log-signal \
 
 `--immediate` 只用于用户明确要求立即沉淀，或紧急且可复用的高成本失败。它是唯一允许跳过普通就绪阈值的入口。
 
+同一项目出现两条同类信号后，不看强度，先进入“仅项目规则就绪”；此时 `propose` 只接受 `project_rule`。达到 3 条信号或总强度 5 后，恢复完整本地落点判断。项目规则采纳不会停用原信号，其他项目后续出现同类方法时仍可继续满足跨项目阈值。
+
 ## 创建本地提案
 
 ```bash
@@ -70,7 +72,7 @@ python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> propose \
   --risk "对只需要名称的快速查询可能增加工作量。"
 ```
 
-具体 `target`、带标题的完整 Markdown `patch` 和 `risk` 都是必填项。`placement` 可以省略并使用骨架推荐。`skill_patch` 必须有具体 Skill 名称和路径；`project_rule` 必须有规则文件建议。
+具体 `target`、带标题的完整 Markdown `patch` 和 `risk` 都是必填项。`placement` 可以省略并使用骨架推荐。`skill_patch` 必须有具体 Skill 名称和路径；`project_rule` 必须有规则文件建议。两条信号触发的项目专用聚类会拒绝除 `project_rule` 以外的落点，提案必须指向推荐规则文件，实际修改目标也必须位于当前项目根目录内。
 
 提案创建后进入 `pending_user_gate`，继续前必须展示本地化用户确认门。
 

@@ -8,7 +8,7 @@ All commands use Python's standard library. Put global options before the subcom
 python <jinhua-dir>/scripts/jinhua.py --project-root <project-root> cycle
 ```
 
-`cycle` initializes or migrates local runtime, summarizes local state, imports compressed active signals into global runtime, and surfaces pending gates or ready proposal skeletons.
+`cycle` initializes or migrates local runtime, reconciles historical active clusters against current thresholds, summarizes local state, imports compressed active signals into global runtime, and surfaces pending gates or ready proposal skeletons.
 
 Useful options:
 
@@ -53,6 +53,8 @@ Source type, summary, operator, cluster key, and context are required. Strength 
 
 Use `--immediate` only for an explicit crystallization request or urgent reusable high-cost failure. It is the only readiness bypass.
 
+Two matching signals in one project create project-only readiness regardless of strength. `propose` then accepts only `project_rule`. Three signals or total strength 5 restore the full local placement ladder. Project-rule adoption does not deactivate the signals, so later matching evidence from another project can still satisfy cross-project readiness.
+
 ## Local Proposal
 
 ```bash
@@ -68,7 +70,7 @@ Read the README and relevant source before recommending a project for adoption."
   --risk "May add unnecessary work to quick name-only pointers."
 ```
 
-`target`, a Markdown `patch` with a heading, and `risk` are mandatory. `placement` may be omitted to use the skeleton recommendation. A `skill_patch` requires a concrete Skill name/path; a `project_rule` requires the resolver's project-rule file.
+`target`, a Markdown `patch` with a heading, and `risk` are mandatory. `placement` may be omitted to use the skeleton recommendation. A `skill_patch` requires a concrete Skill name/path; a `project_rule` requires the resolver's project-rule file. A two-signal project-only cluster rejects any placement other than `project_rule`, requires that rule file as the proposal target, and rejects an applied target outside the current project root.
 
 The proposal enters `pending_user_gate`. Show the localized user gate before continuing.
 

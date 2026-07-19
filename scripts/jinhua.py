@@ -91,16 +91,20 @@ PLACEMENT_USER_GATE = (
     "项目规则(project_rule) / 增强已有 Skill(skill_patch) / "
     "个人全局 Skill(personal_global_skill) / 拒绝(No) / 修订(Revision)"
 )
+PROJECT_RULE_USER_GATE = "项目规则(project_rule) / 拒绝(No) / 修订(Revision)"
 GLOBAL_USER_GATE = (
     "增强已有 Skill(skill_patch) / 个人全局 Skill(personal_global_skill) / "
     "拒绝(No) / 修订(Revision)"
 )
+PROJECT_RULE_SIGNAL_THRESHOLD = 2
 SIGNAL_COUNT_THRESHOLD = 3
 SIGNAL_STRENGTH_THRESHOLD = 5
 COOLDOWN_SIGNAL_LIMIT = 5
 GLOBAL_PROJECT_THRESHOLD = 3
 GLOBAL_EVIDENCE_THRESHOLD = 5
 GLOBAL_STRENGTH_THRESHOLD = 7
+GLOBAL_REPEAT_PROJECT_THRESHOLD = 2
+GLOBAL_REPEAT_EVIDENCE_THRESHOLD = 3
 GLOBAL_FAST_PROJECT_THRESHOLD = 2
 GLOBAL_FAST_STRENGTH_THRESHOLD = 6
 DEFAULT_RUNTIME_DIR_NAME = ".jinhua"
@@ -877,6 +881,7 @@ def ensure_runtime(args: argparse.Namespace, auto_init: bool = False) -> None:
             return
         raise SystemExit("Runtime directory not initialized. Run: jinhua.py init")
     migrate_local_runtime(args)
+    reconcile_local_readiness(args)
 
 
 def global_runtime_exists(args: argparse.Namespace | None = None) -> bool:
@@ -901,6 +906,7 @@ def ensure_global_runtime(args: argparse.Namespace | None = None) -> None:
         else:
             write_json(path, default_global_state())
     migrate_global_runtime(args)
+    reconcile_global_readiness(args)
 
 
 def is_skill_source_project(args: argparse.Namespace) -> bool:
@@ -937,6 +943,16 @@ def cooldown_is_active(cluster: dict) -> bool:
     return remaining > 0
 
 
+def local_readiness_scope(cluster: dict, immediate: bool = False) -> str:
+    count = int(cluster.get("signal_count", 0))
+    strength = int(cluster.get("strength_sum", 0))
+    if immediate or count >= SIGNAL_COUNT_THRESHOLD or strength >= SIGNAL_STRENGTH_THRESHOLD:
+        return "placement_ladder"
+    if count >= PROJECT_RULE_SIGNAL_THRESHOLD:
+        return "project_only"
+    return ""
+
+
 def threshold_reason(cluster: dict, immediate: bool = False) -> str:
     if immediate:
         return "immediate trigger requested by model/user"
@@ -948,7 +964,35 @@ def threshold_reason(cluster: dict, immediate: bool = False) -> str:
         return f"signal_count >= {SIGNAL_COUNT_THRESHOLD}"
     if strength >= SIGNAL_STRENGTH_THRESHOLD:
         return f"strength_sum >= {SIGNAL_STRENGTH_THRESHOLD}"
+    if count >= PROJECT_RULE_SIGNAL_THRESHOLD:
+        return f"project-only repeat: signal_count >= {PROJECT_RULE_SIGNAL_THRESHOLD}"
     return ""
+
+
+def reconcile_local_readiness(args: argparse.Namespace) -> bool:
+    state = read_cluster_state(args)
+    signals = read_jsonl(data_dir(args) / "signals.jsonl")
+    immediate_keys = {
+        str(signal.get("cluster_key", ""))
+        for signal in signals
+        if signal.get("status") == "active" and signal.get("immediate")
+    }
+    changed = False
+    for key, cluster in state.get("clusters", {}).items():
+        status = cluster.get("status", "active")
+        if status in {"proposed", "adopted"}:
+            continue
+        if status == "cooldown" and cooldown_is_active(cluster):
+            continue
+        reason = threshold_reason(cluster, immediate=key in immediate_keys)
+        next_status = "ready" if reason else "active"
+        if status != next_status or cluster.get("ready_reason", "") != reason:
+            cluster["status"] = next_status
+            cluster["ready_reason"] = reason
+            changed = True
+    if changed:
+        write_cluster_state(args, state)
+    return changed
 
 
 def canonical_operator(value: str) -> str:
@@ -1289,19 +1333,26 @@ def require_markdown_patch(value: str) -> str:
 
 
 def infer_local_placement(args: argparse.Namespace | None, cluster: dict, records: list[dict]) -> dict:
-    recommendation = recommend_local_skill(args, cluster, records)
-    text = placement_text(cluster, records)
+    immediate = any(bool(record.get("immediate")) for record in records)
+    readiness_scope = local_readiness_scope(cluster, immediate=immediate)
     project_rule = recommend_project_rule_file(args)
-    if looks_like_personal_global_skill(text):
+    if readiness_scope == "project_only":
+        recommendation = {}
+        placement = "project_rule"
+        reason = "two same-project signals qualify only for a current-project rule"
+    else:
+        recommendation = recommend_local_skill(args, cluster, records)
+        text = placement_text(cluster, records)
+    if readiness_scope != "project_only" and looks_like_personal_global_skill(text):
         placement = "personal_global_skill"
         reason = "the signal explicitly asks for all-project or standalone Skill use"
-    elif looks_like_skill_patch(text, recommendation):
+    elif readiness_scope != "project_only" and looks_like_skill_patch(text, recommendation):
         placement = "skill_patch"
         if recommendation:
             reason = f"an existing local Skill is the closest owner: {recommendation.get('name', '')}"
         else:
             reason = "the signal is about changing an existing Skill rule"
-    else:
+    elif readiness_scope != "project_only":
         placement = "project_rule"
         reason = "same-project repetition shows current project need, without enough cross-project evidence"
     owner = recommendation if placement == "skill_patch" else {}
@@ -1318,6 +1369,7 @@ def infer_local_placement(args: argparse.Namespace | None, cluster: dict, record
         "recommended_project_rule_reason": project_rule_fields.get("recommended_project_rule_reason", ""),
         "project_rule_candidates": project_rule_fields.get("project_rule_candidates", []),
         "project_rule_existing_files": project_rule_fields.get("project_rule_existing_files", []),
+        "project_only": readiness_scope == "project_only",
         "skill_candidates": [
             {
                 "name": item.get("name", ""),
@@ -1434,6 +1486,8 @@ def local_proposal_skeleton(cluster: dict, signals: list[dict], args: argparse.N
         "recommended_project_rule_reason": placement["recommended_project_rule_reason"],
         "project_rule_candidates": placement["project_rule_candidates"],
         "project_rule_existing_files": placement["project_rule_existing_files"],
+        "project_only": placement["project_only"],
+        "user_gate": PROJECT_RULE_USER_GATE if placement["project_only"] else PLACEMENT_USER_GATE,
         "skill_candidates": placement["skill_candidates"],
         "patch_hint": compact_text(patch_hint, limit=260),
         "risk_hint": compact_text(risk, limit=180),
@@ -1486,6 +1540,14 @@ def global_threshold_reason(cluster: dict) -> str:
             f"strength_sum >= {GLOBAL_STRENGTH_THRESHOLD}"
         )
     if (
+        project_count >= GLOBAL_REPEAT_PROJECT_THRESHOLD
+        and evidence_count >= GLOBAL_REPEAT_EVIDENCE_THRESHOLD
+    ):
+        return (
+            f"cross-project repeat path: unique_project_count >= {GLOBAL_REPEAT_PROJECT_THRESHOLD}, "
+            f"evidence_count >= {GLOBAL_REPEAT_EVIDENCE_THRESHOLD}"
+        )
+    if (
         project_count >= GLOBAL_FAST_PROJECT_THRESHOLD
         and strength >= GLOBAL_FAST_STRENGTH_THRESHOLD
         and (high_strength_count >= 2 or correction_count >= 2)
@@ -1495,6 +1557,26 @@ def global_threshold_reason(cluster: dict) -> str:
             f"strength_sum >= {GLOBAL_FAST_STRENGTH_THRESHOLD}, repeated high-strength/user-correction evidence"
         )
     return ""
+
+
+def reconcile_global_readiness(args: argparse.Namespace | None = None) -> bool:
+    state = read_global_clusters(args)
+    changed = False
+    for cluster in state.get("clusters", {}).values():
+        status = cluster.get("status", "active")
+        if status in {"proposed", "adopted"}:
+            continue
+        if status == "cooldown" and cooldown_is_active(cluster):
+            continue
+        reason = global_threshold_reason(cluster)
+        next_status = "ready" if reason else "active"
+        if status != next_status or cluster.get("ready_reason", "") != reason:
+            cluster["status"] = next_status
+            cluster["ready_reason"] = reason
+            changed = True
+    if changed:
+        write_global_clusters(state, args)
+    return changed
 
 
 def update_cluster_for_signal(args: argparse.Namespace, signal: dict) -> dict:
@@ -2788,15 +2870,33 @@ def command_propose(args: argparse.Namespace) -> None:
     signals = find_signals_for_cluster(args, args.cluster_key)
     evidence = signals[-3:]
     skeleton = local_proposal_skeleton(cluster, signals, args)
-    placement = normalize_placement(args.placement, skeleton.get("placement_hint", "project_rule"))
+    project_only = bool(skeleton.get("project_only"))
+    if project_only and args.placement and args.placement != "project_rule":
+        raise SystemExit(
+            "This cluster is ready only for a current-project rule after two same-project signals. "
+            "Use project_rule or wait for broader evidence."
+        )
+    placement = "project_rule" if project_only else normalize_placement(
+        args.placement, skeleton.get("placement_hint", "project_rule")
+    )
     placement_reason = args.placement_reason or skeleton.get("placement_reason", "")
-    recommended_skill = args.recommended_skill or skeleton.get("recommended_skill", "")
-    recommended_skill_path = args.recommended_skill_path or skeleton.get("recommended_skill_path", "")
+    recommended_skill = (
+        "" if project_only else args.recommended_skill or skeleton.get("recommended_skill", "")
+    )
+    recommended_skill_path = (
+        "" if project_only else args.recommended_skill_path or skeleton.get("recommended_skill_path", "")
+    )
     if placement == "skill_patch" and (not recommended_skill or not recommended_skill_path):
         raise SystemExit("skill_patch requires a concrete recommended local Skill and path.")
     if placement == "project_rule" and not skeleton.get("recommended_project_rule_file"):
         raise SystemExit("project_rule requires a concrete recommended project rule file.")
     target = require_concrete_text(args.target, "--target")
+    if project_only:
+        rule_file = str(skeleton.get("recommended_project_rule_file", "")).strip()
+        if rule_file and Path(rule_file).name.lower() not in target.lower():
+            raise SystemExit(
+                f"A project-only proposal must target the recommended current-project rule file: {rule_file}"
+            )
     patch = require_markdown_patch(args.patch)
     risk = require_concrete_text(args.risk, "--risk")
     proposal_id = make_id("prop")
@@ -2816,11 +2916,12 @@ def command_propose(args: argparse.Namespace) -> None:
         "recommended_project_rule_path": skeleton.get("recommended_project_rule_path", ""),
         "recommended_project_rule_reason": skeleton.get("recommended_project_rule_reason", ""),
         "project_rule_candidates": skeleton.get("project_rule_candidates", []),
+        "project_only": project_only,
         "target": target,
         "patch": patch,
         "risk": risk,
         "status": "pending_user_gate",
-        "user_gate": PLACEMENT_USER_GATE,
+        "user_gate": skeleton["user_gate"],
     }
     append_jsonl(data_dir(args) / "proposals.jsonl", proposal)
     cluster["status"] = "proposed"
@@ -2868,7 +2969,7 @@ Risk:
 {proposal['risk']}
 
 User gate:
-Choose: {PLACEMENT_USER_GATE}
+Choose: {proposal['user_gate']}
 Choosing a placement means accepting that placement.
 
 Proposal ID:
@@ -2899,6 +3000,11 @@ def command_apply_proposal(args: argparse.Namespace) -> None:
         raise SystemExit("Proposal is not pending user gate.")
 
     final_placement = normalize_placement(args.placement)
+    if proposal.get("project_only") and final_placement != "project_rule":
+        raise SystemExit(
+            "This proposal was unlocked by two same-project signals and is limited to project_rule. "
+            "Wait for broader evidence or create a new proposal after the cluster reaches the full threshold."
+        )
     if final_placement == "skill_patch" and (
         not proposal.get("recommended_skill") or not proposal.get("recommended_skill_path")
     ):
@@ -2915,6 +3021,12 @@ def command_apply_proposal(args: argparse.Namespace) -> None:
     if args.placement_reason:
         proposal["placement_reason"] = args.placement_reason
     applied_target = require_concrete_text(args.applied_target, "--applied-target")
+    if proposal.get("project_only"):
+        applied_path = Path(applied_target).expanduser()
+        if not applied_path.is_absolute():
+            applied_path = project_root(args) / applied_path
+        if not path_is_relative_to(applied_path.resolve(), project_root(args).resolve()):
+            raise SystemExit("A project-only proposal must be applied inside the current project root.")
     edit_summary = require_concrete_text(args.summary, "--summary")
 
     proposal["status"] = "applied"
@@ -3086,6 +3198,7 @@ def command_cycle(args: argparse.Namespace) -> None:
         initialized = True
     else:
         migrate_local_runtime(args)
+        reconcile_local_readiness(args)
 
     summary = collect_runtime_summary(args)
     summary["initialized"] = initialized
@@ -3180,9 +3293,9 @@ def command_cycle(args: argparse.Namespace) -> None:
                 print(f"  target_hint: {skeleton.get('target_hint', '')}")
                 print(f"  patch_hint: {skeleton.get('patch_hint', '')}")
                 print(f"  risk_hint: {skeleton.get('risk_hint', '')}")
+                print(f"  user_gate: {skeleton.get('user_gate', PLACEMENT_USER_GATE)}")
         print(
-            "\nNext: run `propose` with the refined skeleton, then ask the user to choose "
-            f"{PLACEMENT_USER_GATE}."
+            "\nNext: run `propose` with one refined skeleton, then show that cluster's user_gate."
         )
 
     if global_summary and global_summary["ready_clusters"]:
@@ -3279,6 +3392,8 @@ def command_validate(args: argparse.Namespace) -> None:
                 if record.get("status") not in PROPOSAL_STATUSES:
                     errors.append(f"{path}:{index}: invalid proposal status: {record.get('status')!r}")
                 if record.get("status") in {"pending_user_gate", "needs_revision"}:
+                    if record.get("project_only") and record.get("placement") != "project_rule":
+                        errors.append(f"{path}:{index}: project-only proposal must use project_rule")
                     if not str(record.get("target", "")).strip() or str(record.get("target", "")).startswith("["):
                         errors.append(f"{path}:{index}: target must be concrete")
                     if not re.search(r"(?m)^#{1,6}\s+\S", str(record.get("patch", ""))):
